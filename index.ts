@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 logger.debug("CLI ENTRY POINT HIT", process.argv);
 
 const app = new CLI({
-  commandName: "app",
+  commandName: "nexical",
   searchDirectories: [path.resolve(__dirname, "./src/commands")],
 });
 app.start();
