@@ -1,200 +1,180 @@
-# @app/cli
+# Nexical CLI
 
-The core framework for building powerful, extensible Command Line Interfaces (CLIs) within the Nexical ecosystem.
+The **Nexical CLI** is the official command-line interface for the Nexical Orchestrator. It allows developers, platform engineers, and administrators to interact with the Nexical API directly from their terminal.
 
-This package provides the foundational architecture for specialized CLI toolsets, including command discovery, execution orchestration, and a class-based command pattern. It is designed to be **agnostic**, allowing it to be used as the backbone for other CLI tools that need a similar structure and extensibility.
-
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-  - [Configuration](#configuration)
-  - [Directory Structure](#directory-structure)
-- [Creating Commands](#creating-commands)
-  - [The BaseCommand](#the-basecommand)
-  - [Defining Arguments & Options](#defining-arguments--options)
-  - [Command Discovery Rules](#command-discovery-rules)
-- [Architecture](#architecture)
-- [License](#license)
+Whether you are managing teams, configuring projects, triggering jobs, or handling authentication tokens, the CLI provides a robust and scriptable interface for all your orchestration needs.
 
 ---
 
-## Features
+## 🚀 Getting Started
 
-- **Class-Based Architecture**: Build commands as TypeScript classes with inheritance and lifecycle methods.
-- **Dynamic Discovery**: Automatically recursively finds and registers commands from specified directories.
-- **Type-Safe Definitions**: Declarative definition of arguments and options.
-- **Built-in Help**: Automatic generation of help text for commands and subcommands.
-- **Configuration Support**: Aware of project-level configuration (e.g., `{command_name}.yml`).
-- **Robust Error Handling**: Standardized error reporting and debug modes.
+### Prerequisites
 
----
+- **Node.js**: v22 or higher
+- **NPM**: v10 or higher
 
-## Installation
+### Installation
 
-This package is typically used as a dependency within a specific CLI implementation (like `@app/cli`).
+Install the package from NPM package repository:
 
 ```bash
-npm install @nexical/cli-core
+npm install -g @nexical/cli
+```
+
+### Local Development
+
+To run the CLI locally during development, you can use `npm start`. To pass arguments to the CLI, use the `--` separator:
+
+```bash
+# Example: Running the 'whoami' command
+npm start -- whoami
+
+# Example: Logging in
+npm start -- login
+```
+
+Alternatively, you can link the binary globally to use the `nexical` command directly:
+
+```bash
+npm link
+nexical --help
 ```
 
 ---
 
-## Usage
+## 🔑 Authentication
 
-To use the core framework, you need to instantiate the `CLI` class and start it. This is typically done in your CLI's entry point (e.g., `index.ts`).
+The CLI supports a secure **Device Flow** for authentication, making it easy to log in from your terminal without handling sensitive passwords directly.
 
-### Configuration
+### 1. Log In
+Start the authentication process. This will provide a verification URL and a code.
 
-The `CLI` class accepts a `CLIConfig` object to customize behavior:
-
-```typescript
-import { CLI } from "@nexical/cli-core";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const app = new CLI({
-  // 1. The name of your binary/command (displayed in help)
-  commandName: "my-cli",
-
-  // 2. Directories to recursively search for command files
-  searchDirectories: [
-    path.resolve(__dirname, "commands"),
-    // You can add multiple directories, e.g., for plugins
-    path.resolve(process.cwd(), "plugins/commands"),
-  ],
-});
-
-app.start();
+```bash
+nexical login
 ```
+*Follow the on-screen instructions to authorize the device via your browser.*
 
-### Directory Structure
+### 2. Verify Session
+Check your current logged-in status and user details.
 
-A typical project using `@nexical/cli-core` looks like this:
-
-```
-my-cli/
-├── package.json
-├── src/
-│   ├── index.ts        <-- Entry point (initializes CLI)
-│   └── commands/       <-- Command files
-│       ├── init.ts
-│       ├── build.ts
-│       └── module/     <-- Subcommands
-│           ├── add.ts
-│           └── list.ts
+```bash
+nexical whoami
 ```
 
 ---
 
-## Creating Commands
+## 🛠️ Usage & Commands
 
-The core framework itself only includes a **Help** command. All functional commands must be implemented by consuming libraries.
+The CLI is structured into resource-based commands. You can always run `nexical <command> --help` to see available subcommands and options.
 
-### The BaseCommand
+### 👥 Teams (`team`)
 
-All commands must extend the `BaseCommand` abstract class exported by the core.
+Manage user teams and memberships.
 
-```typescript
-// src/commands/greet.ts
-import { BaseCommand } from "@nexical/cli-core";
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `list` | `nexical team list` | List all teams you belong to or own. |
+| `create` | `nexical team create <name> [--slug <slug>]` | Create a new team. |
+| `get` | `nexical team get <teamId>` | View details of a specific team. |
+| `update` | `nexical team update <teamId> [--name <n>] [--slug <s>]` | Update team settings. |
+| `invite` | `nexical team invite <teamId> <email> [--role <role>]` | Invite a user to a team. |
+| `delete` | `nexical team delete <teamId> [--confirm]` | Delete a team permanently. |
 
-export default class GreetCommand extends BaseCommand {
-  // Description shown in help
-  static description = "Greets the user";
+### 📂 Projects (`project`)
 
-  // Implement the run method
-  async run(options: any) {
-    this.info("Hello from my-cli!");
-  }
-}
-```
+Manage projects within your teams.
 
-### Defining Arguments & Options
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `list` | `nexical project list <teamId>` | List all projects in a team. |
+| `create` | `nexical project create <teamId> <name> [--repo <url>]` | Create a new project. |
+| `get` | `nexical project get <teamId> <projectId>` | Get project details. |
+| `update` | `nexical project update <teamId> <projectId> ...` | Update project configuration. |
+| `delete` | `nexical project delete <teamId> <projectId>` | Delete a project. |
 
-You can define arguments and options using the static `args` property.
+### 🌿 Branches (`branch`)
 
-```typescript
-export default class GreetCommand extends BaseCommand {
-  static description = "Greets the user with a custom message";
+Manage development branches for your projects.
 
-  static args = {
-    // Positional arguments
-    args: [
-      {
-        name: "name",
-        required: false,
-        description: "Name to greet",
-        default: "World",
-      },
-    ],
-    // Flags/Options
-    options: [
-      {
-        name: "--shout",
-        description: "Print in uppercase",
-        default: false,
-      },
-      {
-        name: "--count <n>",
-        description: "Number of times to greet",
-        default: 1,
-      },
-    ],
-  };
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `list` | `nexical branch list <teamId> <projectId>` | List branches. |
+| `create` | `nexical branch create <teamId> <projectId> <name>` | Create a branch. |
+| `get` | `nexical branch get <teamId> <projectId> <branchId>` | Get branch details. |
+| `delete` | `nexical branch delete ...` | Delete a branch. |
 
-  async run(options: any) {
-    // 'name' comes from args (mapped to options by name)
-    // 'shout' and 'count' come from options
-    const { name, shout, count } = options;
+### ⚙️ Jobs (`job`)
 
-    const message = `Hello, ${name}!`;
-    const finalMessage = shout ? message.toUpperCase() : message;
+Trigger and monitor orchestration jobs.
 
-    for (let i = 0; i < count; i++) {
-      this.info(finalMessage);
-    }
-  }
-}
-```
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `list` | `nexical job list <teamId> <projectId> <branchId>` | List recent jobs. |
+| `trigger`| `nexical job trigger ... <type> [--input <json>]` | Trigger a new job (e.g., deploy). |
+| `get` | `nexical job get ... <jobId>` | Get job details. |
+| `logs` | `nexical job logs ... <jobId>` | Stream or view logs for a job. |
 
-### Command Discovery Rules
+### 🎟️ API Tokens (`token`)
 
-The `CommandLoader` uses the file structure to determine command names:
+Manage personal access tokens for scripting and CI/CD.
 
-- **File Name = Command Name**:
-  - `commands/build.ts` -> `my-cli build`
-- **Nested Directories = Subcommands**:
-  - `commands/user/create.ts` -> `my-cli user create`
-- **Index Files = Parent Command**:
-  - `commands/user/index.ts` -> `my-cli user` (The handler for the root `user` command)
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `list` | `nexical token list` | List your active tokens. |
+| `create` | `nexical token create <name> [--scopes <list>]` | Generate a new API token. |
+| `revoke` | `nexical token revoke <id>` | Revoke a token. |
 
-> **Note**: A file must default export a class extending `BaseCommand` to be registered.
+### 🛡️ Admin (`admin`)
+
+System administration commands (requires elevated permissions).
+
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `create-user` | `nexical admin create-user <name> <email> <password>` | Create a system user. |
 
 ---
 
-## Architecture
+## 🏗️ Project Structure
 
-The core is built around three main components:
+The codebase is organized to be modular and extensible:
 
-1.  **`CLI`**: The main entry point. It wraps [CAC](https://github.com/cacjs/cac) to handle argument parsing and acts as the dependency injection container for commands.
-2.  **`CommandLoader`**: Scans the filesystem for command files. It handles importing typescript files and validating that they export a valid command class.
-3.  **`BaseCommand`**: Provides the interface for commands, including:
-    - `init()`: Async initialization hook (pre-run).
-    - `run()`: The main execution logic.
-    - `this.projectRoot`: Automatically resolved path to the project root (if running in a project context).
-    - Output helpers:
-      - `this.success(msg)`: Logs success message (✔) in green.
-      - `this.warn(msg)`: Logs warning message (⚠) in yellow.
-      - `this.error(msg, code?)`: Logs error (✖) in red and exits.
-      - `this.notice(msg)`: Logs a notice (📢) in blue.
-      - `this.input(msg)`: Logs an input prompt display (?) in cyan.
-      - `this.info(msg)`: Standard informational message.
-    - Input helpers:
-      - `this.prompt(msg)`: Prompts the user for input and returns the result.
+```
+src/
+├── commands/           # Command implementations
+│   ├── team/           # Team-related commands
+│   ├── project/        # Project-related commands
+│   └── ...
+├── utils/              # Shared utilities (API client, config)
+└── index.ts            # CLI entry point
+```
+
+Each command is a class extending `BaseCommand` from `@nexical/cli-core`, enforcing a consistent structure for arguments, help text, and error handling.
+
+---
+
+## 🧪 Testing
+
+We use **Vitest** for testing.
+
+```bash
+# Run unit tests
+npm run test:unit
+```
+
+---
+
+## 🤝 Contributing
+
+1.  **Fork** the repository.
+2.  **Clone** your fork.
+3.  **Install** dependencies (`npm install`).
+4.  **Creating a Command**:
+    - Add a new file in `src/commands/<topic>/<verb>.ts`.
+    - Extend `BaseCommand`.
+    - Define `static description` and `static args`.
+    - Implement `run()`.
+5.  **Test** your changes.
+6.  **Submit** a Pull Request.
 
 ---
 
