@@ -1,4 +1,4 @@
-name: Deploy App CLI
+name: Deploy Nexical CLI
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build
         run: npm run build
