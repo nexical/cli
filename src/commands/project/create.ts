@@ -49,7 +49,7 @@ export default class ProjectsCreateCommand extends BaseCommand {
             const project = await client.projects.create(tid, {
                 name,
                 repoUrl: repo,
-                productionUrl: prod,
+                productionUrl: prod
             });
 
             this.success(`Project "${project.name}" set up successfully!`);

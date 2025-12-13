@@ -46,7 +46,6 @@ export default class TeamsUpdateCommand extends BaseCommand {
             });
             this.success(`Team ${team.id} updated!`);
             this.info(`Name: ${team.name}`);
-            this.info(`Slug: ${team.slug}`);
         } catch (error: any) {
             this.error(`Failed to update team: ${error.message}`);
         }
