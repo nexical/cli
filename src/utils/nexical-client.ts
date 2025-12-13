@@ -4,14 +4,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const CONFIG_DIR = path.join(os.homedir(), '.nexical');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+const getConfigPaths = () => {
+    const HOME = process.env.HOME || os.homedir();
+    const CONFIG_DIR = path.join(HOME, '.nexical');
+    const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+    return { CONFIG_DIR, CONFIG_FILE };
+};
 
 interface Config {
     token?: string;
 }
 
 export function getConfig(): Config {
+    const { CONFIG_FILE } = getConfigPaths();
     if (!fs.existsSync(CONFIG_FILE)) {
         return {};
     }
@@ -24,6 +29,7 @@ export function getConfig(): Config {
 }
 
 export function saveToken(token: string) {
+    const { CONFIG_DIR, CONFIG_FILE } = getConfigPaths();
     if (!fs.existsSync(CONFIG_DIR)) {
         fs.mkdirSync(CONFIG_DIR, { recursive: true });
     }
@@ -36,5 +42,6 @@ export function getClient(): NexicalClient {
     const config = getConfig();
     return new NexicalClient({
         token: config.token,
+        baseURL: process.env.NEXICAL_API_URL,
     });
 }

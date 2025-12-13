@@ -10,7 +10,7 @@ vi.mock('node:fs');
 vi.mock('node:fs');
 vi.mock('node:os', () => ({
     default: {
-        homedir: () => '/home/user'
+        homedir: vi.fn(() => '/home/user')
     }
 }));
 vi.mock('@nexical/sdk');
@@ -22,7 +22,22 @@ describe('nexical-client', () => {
 
     beforeEach(() => {
         vi.resetAllMocks();
+        vi.stubEnv('HOME', '/home/user');
         // os.homedir is already mocked by factory
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it('should use os.homedir() if HOME env var is not set', () => {
+        vi.unstubAllEnvs();
+        vi.stubEnv('HOME', '');
+
+        // Trigger path resolution
+        getConfig();
+
+        expect(os.homedir).toHaveBeenCalled();
     });
 
     describe('getConfig', () => {
