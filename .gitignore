@@ -1,0 +1,6 @@
+# Typescript package files
+node_modules
+dist
+
+# Test files
+coverage
