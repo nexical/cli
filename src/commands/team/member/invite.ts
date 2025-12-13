@@ -1,6 +1,6 @@
 
 import { BaseCommand } from '@nexical/cli-core';
-import { getClient } from '../../utils/nexical-client.js';
+import { getClient } from '../../../utils/nexical-client.js';
 
 export default class TeamsInviteCommand extends BaseCommand {
     static description = 'Invite a user to a team';

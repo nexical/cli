@@ -1,6 +1,6 @@
 
 import { BaseCommand } from '@nexical/cli-core';
-import { getClient } from '../../../utils/nexical-client.js';
+import { getClient } from '../../utils/nexical-client.js';
 
 export default class AdminUsersCreateSystemCommand extends BaseCommand {
     static description = 'Create a new system user';
