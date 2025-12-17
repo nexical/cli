@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { CLI, logger } from "@nexical/cli-core";
-import path from "node:path";
+import { CLI } from "@nexical/cli-core";
 import { fileURLToPath } from "node:url";
+import pkg from './package.json';
+import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-logger.debug("CLI ENTRY POINT HIT", process.argv);
-
 const app = new CLI({
+  version: pkg.version,
   commandName: "nexical",
   searchDirectories: [path.resolve(__dirname, "./src/commands")],
 });
