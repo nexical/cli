@@ -5,3 +5,7 @@ dist
 # Test files
 coverage
 .test-tmp
+
+# Temporary files
+platform/core
+
