@@ -1,6 +1,6 @@
 {
     "name": "@nexical/cli",
-    "version": "0.5.5",
+    "version": "0.10.0",
     "type": "module",
     "bin": {
         "nexical": "./dist/index.js"
