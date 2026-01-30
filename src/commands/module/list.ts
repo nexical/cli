@@ -9,11 +9,11 @@ export default class ModuleListCommand extends BaseCommand {
 
     async run() {
         const projectRoot = this.projectRoot as string;
-        const modulesDir = path.resolve(projectRoot, 'src', 'modules');
+        const modulesDir = path.resolve(projectRoot, 'modules');
         logger.debug(`Scanning for modules in: ${modulesDir}`);
 
         if (!(await fs.pathExists(modulesDir))) {
-            this.info('No modules installed (src/modules directory missing).');
+            this.info('No modules installed (modules directory missing).');
             return;
         }
 

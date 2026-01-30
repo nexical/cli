@@ -57,7 +57,7 @@ export default class ModuleAddCommand extends BaseCommand {
         this.info(`Inspecting ${cleanUrl}...`);
 
         // Stage 1: Inspect (Temp Clone)
-        const stagingDir = path.resolve(projectRoot!, '.astrical', 'cache', `staging-${Date.now()}-${Math.random().toString(36).substring(7)}`);
+        const stagingDir = path.resolve(projectRoot!, '.nexical', 'cache', `staging-${Date.now()}-${Math.random().toString(36).substring(7)}`);
         let moduleName = '';
         let dependencies: string[] = [];
 
@@ -101,7 +101,7 @@ export default class ModuleAddCommand extends BaseCommand {
         }
 
         // Stage 2: Conflict Detection
-        const targetDir = path.join(projectRoot!, 'src', 'modules', moduleName);
+        const targetDir = path.join(projectRoot!, 'modules', moduleName);
         const relativeTargetDir = path.relative(projectRoot!, targetDir);
 
         if (await fs.pathExists(targetDir)) {

@@ -6,7 +6,7 @@ import path from 'path';
 
 export default class InitCommand extends BaseCommand {
     static usage = 'init';
-    static description = 'Initialize a new Astrical project.';
+    static description = 'Initialize a new Nexical project.';
     static requiresProject = false;
 
     static args: CommandDefinition = {
@@ -17,7 +17,7 @@ export default class InitCommand extends BaseCommand {
             {
                 name: '--repo <url>',
                 description: 'Starter repository URL (supports gh@owner/repo syntax)',
-                default: 'gh@astrical-cms/starter'
+                default: 'gh@nexical/app-core'
             }
         ]
     };
@@ -51,46 +51,25 @@ export default class InitCommand extends BaseCommand {
             this.info('Installing dependencies...');
             await runCommand('npm install', targetPath);
 
-            this.info('Re-initializing git history...');
-            // Orphan branch strategy to wipe history but keep files
-            await git.checkoutOrphan('new-main', targetPath);
-
-            // Delete old main/master (check if they exist first to avoid errors)
-            if (await git.branchExists('main', targetPath)) {
-                await git.deleteBranch('main', targetPath);
-            }
-            if (await git.branchExists('master', targetPath)) {
-                await git.deleteBranch('master', targetPath);
-            }
-
-            await git.renameBranch('main', targetPath);
-            await git.removeRemote('origin', targetPath);
-
-            this.info('Seeding project with Core defaults...');
-            const corePath = path.join(targetPath, 'src', 'core');
-            const coreThemesDefault = path.join(corePath, 'src', 'themes-default');
-            const corePublicDefault = path.join(corePath, 'public-default');
-            const coreContentDefault = path.join(corePath, 'content-default');
+            this.info('Setting up upstream remote...');
+            await git.renameRemote('origin', 'upstream', targetPath);
 
             // Ensure module directory
-            await fs.ensureDir(path.join(targetPath, 'src', 'modules'));
+            await fs.ensureDir(path.join(targetPath, 'modules'));
 
-            // Seed Public: content of src/themes-default -> themes (at root)
-            if (await fs.pathExists(coreThemesDefault)) {
-                await fs.ensureDir(path.join(targetPath, 'themes'));
-                await fs.copy(coreThemesDefault, path.join(targetPath, 'themes'), { overwrite: false });
+            // Check for nexical.yaml, if not present create a default one
+            const configPath = path.join(targetPath, 'nexical.yaml');
+            if (!await fs.pathExists(configPath)) {
+                this.info('Creating default nexical.yaml...');
+                await fs.writeFile(configPath, 'name: ' + path.basename(targetPath) + '\nmodules: []\n');
             }
 
-            // Seed Public: content of public-default -> public (at root)
-            if (await fs.pathExists(corePublicDefault)) {
-                await fs.ensureDir(path.join(targetPath, 'public'));
-                await fs.copy(corePublicDefault, path.join(targetPath, 'public'), { overwrite: false });
-            }
-
-            // Seed Content: content of content-default -> content (at root)
-            if (await fs.pathExists(coreContentDefault)) {
-                await fs.ensureDir(path.join(targetPath, 'content'));
-                await fs.copy(coreContentDefault, path.join(targetPath, 'content'), { overwrite: false });
+            // Create VERSION file
+            const versionPath = path.join(targetPath, 'VERSION');
+            // Check if version file exists, if not create it
+            if (!await fs.pathExists(versionPath)) {
+                this.info('Creating VERSION file with 0.1.0...');
+                await fs.writeFile(versionPath, '0.1.0');
             }
 
             await git.addAll(targetPath);

@@ -1,9 +1,9 @@
 {
-    "name": "@astrical/cli",
+    "name": "@nexical/cli",
     "version": "0.5.5",
     "type": "module",
     "bin": {
-        "astrical": "./dist/index.js"
+        "nexical": "./dist/index.js"
     },
     "scripts": {
         "build": "tsup",

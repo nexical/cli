@@ -22,7 +22,7 @@ export default class ModuleUpdateCommand extends BaseCommand {
 
         try {
             if (name) {
-                const relativePath = `src/modules/${name}`;
+                const relativePath = `modules/${name}`;
                 const fullPath = path.resolve(projectRoot, relativePath);
 
                 if (!(await fs.pathExists(fullPath))) {

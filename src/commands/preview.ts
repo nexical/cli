@@ -17,7 +17,7 @@ export default class PreviewCommand extends BaseCommand {
         logger.debug('Preview paths:', { siteDir, distDir });
 
         if (!(await fs.pathExists(distDir))) {
-            this.error("Please run 'astrical build' first.");
+            this.error("Please run 'nexical build' first.");
             return;
         }
 

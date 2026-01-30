@@ -27,7 +27,7 @@ export default class ModuleInitCommand extends BaseCommand {
         const projectRoot = this.projectRoot as string;
         const { module_name, repo } = options;
 
-        const modulesDir = path.join(projectRoot, 'src', 'modules');
+        const modulesDir = path.join(projectRoot, 'modules');
         const targetDir = path.join(modulesDir, module_name);
 
         if (await fs.pathExists(targetDir)) {

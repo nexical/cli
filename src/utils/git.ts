@@ -51,6 +51,10 @@ export async function removeRemote(remote: string, cwd: string): Promise<void> {
     await runCommand(`git remote remove ${remote}`, cwd);
 }
 
+export async function renameRemote(oldName: string, newName: string, cwd: string): Promise<void> {
+    await runCommand(`git remote rename ${oldName} ${newName}`, cwd);
+}
+
 export async function branchExists(branch: string, cwd: string): Promise<boolean> {
     try {
         await execAsync(`git show-ref --verify --quiet refs/heads/${branch}`, { cwd });

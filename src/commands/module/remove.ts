@@ -17,7 +17,7 @@ export default class ModuleRemoveCommand extends BaseCommand {
         const projectRoot = this.projectRoot as string;
         let { name } = options;
 
-        const relativePath = `src/modules/${name}`;
+        const relativePath = `modules/${name}`;
         const fullPath = path.resolve(projectRoot, relativePath);
 
         logger.debug('Removing module at:', fullPath);
@@ -34,7 +34,7 @@ export default class ModuleRemoveCommand extends BaseCommand {
             await runCommand(`git rm -f ${relativePath}`, projectRoot);
 
             // Clean up .git/modules
-            const gitModulesDir = path.resolve(projectRoot, '.git', 'modules', 'src', 'modules', name);
+            const gitModulesDir = path.resolve(projectRoot, '.git', 'modules', 'modules', name);
             if (await fs.pathExists(gitModulesDir)) {
                 await fs.remove(gitModulesDir);
             }

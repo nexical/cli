@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const commandName = 'astrical';
+const commandName = 'nexical';
 const projectRoot = await findProjectRoot(commandName, process.cwd()) || process.cwd();
 const additionalCommands = discoverCommandDirectories(projectRoot);
 
