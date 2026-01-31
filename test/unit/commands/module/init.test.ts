@@ -31,11 +31,11 @@ describe('ModuleInitCommand Unit', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        cli = new CLI({ commandName: 'astrical' });
+        cli = new CLI({ commandName: 'nexical' });
         command = new ModuleInitCommand(cli);
         // BaseCommand usually sets this, but for unit tests we can mock/set it
         (command as any).projectRoot = '/mock/project/root';
-        vi.mocked(resolveGitUrl).mockReturnValue('https://github.com/astrical-modules/starter.git');
+        vi.mocked(resolveGitUrl).mockReturnValue('https://github.com/nexical-modules/starter.git');
     });
 
     afterEach(() => {

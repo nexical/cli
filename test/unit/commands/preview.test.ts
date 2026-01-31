@@ -79,7 +79,7 @@ describe('PreviewCommand', () => {
 
         await command.run({});
 
-        expect(command.error).toHaveBeenCalledWith(expect.stringContaining('run \'astrical build\' first'));
+        expect(command.error).toHaveBeenCalledWith(expect.stringContaining('run \'nexical build\' first'));
         expect(cp.spawn).not.toHaveBeenCalled();
     });
 

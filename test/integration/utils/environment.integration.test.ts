@@ -9,7 +9,7 @@ describe('Environment Integration', () => {
     let projectRoot: string;
 
     beforeEach(async () => {
-        tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'astrical-test-'));
+        tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexical-test-'));
         projectRoot = path.join(tmpDir, 'project');
         await fs.ensureDir(projectRoot);
         // Ensure core exists so we can link to it

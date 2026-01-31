@@ -1,8 +1,8 @@
-# @astrical/cli
+# @nexical/cli
 
-The official Command Line Interface (CLI) for the Astrical framework.
+The official Command Line Interface (CLI) for the Nexical framework.
 
-This project serves as the primary entry point for managing Astrical projects, handling tasks such as project initialization, module management, and development workflows. It is designed to be **extensible**, **fast**, and **developer-friendly**, focusing on a clean architecture that allows for easy addition of new commands.
+This project serves as the primary entry point for managing Nexical projects, handling tasks such as project initialization, module management, and development workflows. It is designed to be **extensible**, **fast**, and **developer-friendly**, focusing on a clean architecture that allows for easy addition of new commands.
 
 ## Table of Contents
 
@@ -22,8 +22,8 @@ This project serves as the primary entry point for managing Astrical projects, h
 
 ## Purpose
 
-The Astrical CLI allows developers to:
-1.  **Initialize** new Astrical projects with best practices built-in.
+The Nexical CLI allows developers to:
+1.  **Initialize** new Nexical projects with best practices built-in.
 2.  **Manage** project configuration and dependencies.
 3.  **Extend** the framework functionality through modular commands.
 
@@ -36,7 +36,7 @@ This CLI is built with **TypeScript** and follows a **Class-Based Command Patter
 ### Key Technologies
 *   **[CAC (Command And Conquer)](https://github.com/cacjs/cac)**: A lightweight, robust framework for building CLIs. It handles argument parsing, help generation, and command registration.
 *   **[Consola](https://github.com/unjs/consola)**: Elegant console logging with fallback and structured output capabilities.
-*   **[Lilconfig](https://github.com/antonk52/lilconfig)**: Configuration loading (searching for `astrical.yml`, `astrical.yaml`) akin to `cosmiconfig` but lighter.
+*   **[Lilconfig](https://github.com/antonk52/lilconfig)**: Configuration loading (searching for `nexical.yml`, `nexical.yaml`) akin to `cosmiconfig` but lighter.
 *   **Vitest**: A blazing fast unit test framework powered by Vite.
 
 ### Core Components
@@ -52,7 +52,7 @@ This CLI is built with **TypeScript** and follows a **Class-Based Command Patter
     *   Project root detection (`this.projectRoot`).
 
 ### Design Goals
-*   **Zero-Config Defaults**: It should work out of the box but allow rich configuration via `astrical.yml`.
+*   **Zero-Config Defaults**: It should work out of the box but allow rich configuration via `nexical.yaml`.
 *   **Extensibility**: Adding a command should be as simple as adding a file.
 *   **Testability**: Every component is designed to be unit-testable, with dependency injection where appropriate (e.g., `CommandLoader` importer).
 
@@ -74,37 +74,37 @@ npm run build
 
 ```bash
 # Run the built CLI
-npx astrical <command> [options]
+npx nexical <command> [options]
 
 # Example: Initialize a new project
-npx astrical init my-new-project
+npx nexical init my-new-project
 
 # Get help
-npx astrical help
+npx nexical help
 
 # Get help for a specific command
-npx astrical help init
-npx astrical help module add
+npx nexical help init
+npx nexical help module add
 ```
 
 ### Command Reference
 
 #### `init`
 
-Initializes a new Astrical project by cloning a starter repository, setting up dependencies, and preparing a fresh git history.
+Initializes a new Nexical project by cloning a starter repository, setting up dependencies, and preparing a fresh git history.
 
 **Usage:**
 ```bash
-npx astrical init <directory> [options]
+npx nexical init <directory> [options]
 ```
 
 **Arguments:**
 - `directory` (Required): The directory to initialize the project in. If the directory does not exist, it will be created. If it does exist, it must be empty.
 
 **Options:**
-- `--repo <url>` (Default: `https://github.com/nexical/astrical-starter`): The URL of the starter repository to clone.
+- `--repo <url>` (Default: `https://github.com/nexical/app-core`): The URL of the starter repository to clone.
     - Supports standard Git URLs (e.g., `https://github.com/user/repo.git`).
-    - Supports GitHub short syntax `gh@owner/repo` (e.g., `gh@nexical/astrical-starter`).
+    - Supports GitHub short syntax `gh@owner/repo` (e.g., `gh@nexical/app-core`).
 
 **What it does:**
 1.  **Clones** the specified starter repository (recursively, including submodules) into the target directory.
@@ -118,7 +118,7 @@ npx astrical init <directory> [options]
     - Removes the `origin` remote to prevent accidental pushes to the starter repo.
 
 **Output:**
-- A ready-to-use Astrical project in the specified directory, with fresh git history and installed dependencies.
+- A ready-to-use Nexical project in the specified directory, with fresh git history and installed dependencies.
 
 ---
 
@@ -128,11 +128,10 @@ Starts the development server in ephemeral mode. It constructs a temporary build
 
 **Usage:**
 ```bash
-npx astrical dev
+npx nexical dev
 ```
 
 **What it does:**
-1.  **Prepares** the `site` directory by mounting `src/core`, `src/modules`, and content.
 2.  **Starts** the Astro development server (accessible at `http://localhost:4321` by default).
 3.  **Watches** for changes in your project and updates the ephemeral build automatically.
 
@@ -144,12 +143,12 @@ Compiles the project for production. It assembles the final site structure in `s
 
 **Usage:**
 ```bash
-npx astrical build
+npx nexical build
 ```
 
 **What it does:**
 1.  **Cleans** the `site` directory to ensure a fresh build.
-2.  **Copies** all necessary source files (`src/core`, `src/modules`, `src/content`, `public`) into `site`.
+2.  **Copies** all necessary source files (`src/`, `modules`, `src/content`, `public`) into `site`.
 3.  **Runs** `astro build` to generate the production output in `site/dist`.
 
 **Output:**
@@ -159,15 +158,15 @@ npx astrical build
 
 #### `preview`
 
-Previews the locally built production site. This is useful for verifying the output of `astrical build` before deploying.
+Previews the locally built production site. This is useful for verifying the output of `nexical build` before deploying.
 
 **Usage:**
 ```bash
-npx astrical preview
+npx nexical preview
 ```
 
 **Prerequisites:**
-- You must run `astrical build` first.
+- You must run `nexical build` first.
 
 **What it does:**
 - Starts a local web server serving the static files from `site/dist`.
@@ -180,7 +179,7 @@ Removes generated build artifacts and temporary directories to ensure a clean st
 
 **Usage:**
 ```bash
-npx astrical clean
+npx nexical clean
 ```
 
 **What it does:**
@@ -190,11 +189,11 @@ npx astrical clean
 
 #### `run`
 
-Executes a script within the Astrical environment context. This handles path resolution and environment variable setup for you.
+Executes a script within the Nexical environment context. This handles path resolution and environment variable setup for you.
 
 **Usage:**
 ```bash
-npx astrical run <script> [args...]
+npx nexical run <script> [args...]
 ```
 
 **Arguments:**
@@ -206,17 +205,17 @@ npx astrical run <script> [args...]
 **Examples:**
 ```bash
 # Run a core project script
-npx astrical run test
+npx nexical run test
 
 # Run a script defined in the 'blog' module's package.json
-npx astrical run blog:sync --force
+npx nexical run blog:sync --force
 ```
 
 ---
 
 #### `module`
 
-Manages the modular architecture of your Astrical project. Allows you to add, remove, update, and list Git-based modules.
+Manages the modular architecture of your Nexical project. Allows you to add, remove, update, and list Git-based modules.
 
 ##### `module add`
 
@@ -224,7 +223,7 @@ Adds a new module as a Git submodule.
 
 **Usage:**
 ```bash
-npx astrical module add <url> [name]
+npx nexical module add <url> [name]
 ```
 
 **Arguments:**
@@ -242,7 +241,7 @@ Lists all installed modules in the project.
 
 **Usage:**
 ```bash
-npx astrical module list
+npx nexical module list
 ```
 
 **Output:**
@@ -254,7 +253,7 @@ Updates one or all modules to their latest remote commit.
 
 **Usage:**
 ```bash
-npx astrical module update [name]
+npx nexical module update [name]
 ```
 
 **Arguments:**
@@ -270,7 +269,7 @@ Removes an installed module and cleans up references.
 
 **Usage:**
 ```bash
-npx astrical module remove <name>
+npx nexical module remove <name>
 ```
 
 **Arguments:**

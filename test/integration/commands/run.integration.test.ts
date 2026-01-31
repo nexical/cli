@@ -23,7 +23,7 @@ describe('RunCommand Integration', () => {
         // Setup minimal env
         await fs.ensureDir(path.join(projectDir, 'src', 'core'));
         await fs.outputFile(path.join(projectDir, 'src', 'core', 'package.json'), JSON.stringify({
-            name: 'astrical-core',
+            name: 'nexical-core',
             scripts: {
                 'test-script': 'echo test'
             }
@@ -62,7 +62,7 @@ describe('RunCommand Integration', () => {
     });
 
     it('should run standard npm scripts', async () => {
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         const command = new RunCommand(cli);
         Object.assign(command, { projectRoot: projectDir });
 
@@ -78,7 +78,7 @@ describe('RunCommand Integration', () => {
     });
 
     it('should run module specific scripts', async () => {
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         const command = new RunCommand(cli);
         Object.assign(command, { projectRoot: projectDir });
 

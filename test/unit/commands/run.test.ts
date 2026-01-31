@@ -253,6 +253,6 @@ describe('RunCommand', () => {
 
         await command.run({ script: 'missing-script', args: [] });
 
-        expect(command.error).toHaveBeenCalledWith(expect.stringContaining('does not exist in Astrical core'));
+        expect(command.error).toHaveBeenCalledWith(expect.stringContaining('does not exist in Nexical core'));
     });
 });

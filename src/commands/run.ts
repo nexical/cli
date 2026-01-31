@@ -7,7 +7,7 @@ import { linkEnvironment } from '../utils/environment.js';
 
 export default class RunCommand extends BaseCommand {
     static usage = 'run <script> [args...]';
-    static description = 'Run a script inside the Astrical environment.';
+    static description = 'Run a script inside the Nexical environment.';
     static requiresProject = true;
 
     static args: CommandDefinition = {
@@ -67,7 +67,7 @@ export default class RunCommand extends BaseCommand {
             const corePkgJsonPath = path.join(siteDir, 'package.json');
             const pkg = await fs.readJson(corePkgJsonPath);
             if (!pkg.scripts || !pkg.scripts[script]) {
-                this.error(`Script ${script} does not exist in Astrical core`);
+                this.error(`Script ${script} does not exist in Nexical core`);
                 return;
             }
             finalArgs = ['run', script, '--', ...scriptArgs];

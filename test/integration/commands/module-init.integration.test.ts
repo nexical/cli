@@ -44,7 +44,7 @@ describe('Module Init Command Integration', () => {
 
     it('should initialize a new module from a local git repo', async () => {
         const moduleName = 'my-feature';
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         // Manually set project root context for the command
         // Since we are invoking the command class directly we might need to mock or set the projectRoot property if BaseCommand exposes it.
         // BaseCommand usually detects project root.
@@ -104,7 +104,7 @@ describe('Module Init Command Integration', () => {
         await fs.ensureDir(targetPath);
         await fs.writeFile(path.join(targetPath, 'file.txt'), 'content');
 
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         const command = new ModuleInitCommand(cli);
         (command as any).projectRoot = projectRoot;
 

@@ -26,8 +26,8 @@ describe('Command Loading Integration', () => {
     });
 
     it('should load commands from modules', async () => {
-        // Create astrical.yaml to mock project root
-        await fs.writeFile(path.join(TEST_TMP_DIR, 'astrical.yaml'), 'name: test-project');
+        // Create nexical.yaml to mock project root
+        await fs.writeFile(path.join(TEST_TMP_DIR, 'nexical.yaml'), 'name: test-project');
 
         // Setup module structure
         const moduleDir = path.join(TEST_TMP_DIR, 'src/modules/test-mod/src/commands');

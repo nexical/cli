@@ -34,7 +34,7 @@ describe('Module Commands Integration', () => {
         const temp = await createTempDir('module-project-');
         projectDir = await createMockRepo(temp, {
             'package.json': '{"name": "test-project", "version": "1.0.0"}',
-            'astrical.yml': 'site: test'
+            'nexical.yml': 'site: test'
         });
 
         // Allow file protocol for submodules in this repo
@@ -68,7 +68,7 @@ describe('Module Commands Integration', () => {
 
     it('should add, list, update and remove a module', async () => {
         const originalCwd = process.cwd();
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         try {
             process.chdir(projectDir);
 

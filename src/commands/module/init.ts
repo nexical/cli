@@ -18,7 +18,7 @@ export default class ModuleInitCommand extends BaseCommand {
             {
                 name: '--repo <url>',
                 description: 'Starter repository URL',
-                default: 'gh@astrical-modules/starter'
+                default: 'gh@nexical-modules/starter'
             }
         ]
     };

@@ -141,10 +141,10 @@ describe('InitCommand', () => {
 
     it('should handle gh@ syntax', async () => {
         const targetDir = 'gh-project';
-        await command.run({ directory: targetDir, repo: 'gh@nexical/astrical-starter' });
+        await command.run({ directory: targetDir, repo: 'gh@nexical/nexical-starter' });
 
         expect(git.clone).toHaveBeenCalledWith(
-            'https://github.com/nexical/astrical-starter.git',
+            'https://github.com/nexical/nexical-starter.git',
             expect.stringContaining(targetDir),
             { recursive: true }
         );

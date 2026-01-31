@@ -50,7 +50,7 @@ describe('Dev/Preview Integration', () => {
     });
 
     it('dev command should spawn astro dev', async () => {
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         const command = new DevCommand(cli);
         Object.assign(command, { projectRoot: projectDir });
 
@@ -66,7 +66,7 @@ describe('Dev/Preview Integration', () => {
     });
 
     it('preview command should spawn astro preview', async () => {
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         const command = new PreviewCommand(cli);
         Object.assign(command, { projectRoot: projectDir });
 

@@ -22,19 +22,19 @@ describe('CleanCommand Integration', () => {
     });
 
     it('should remove site and node_modules directories', async () => {
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         // CleanCommand expects (cli, globalOptions)
         // We pass rootDir here to ensure it's set without relying on auto-discovery in test environment
         const command = new CleanCommand(cli, { rootDir: tempDir });
 
         // Create project config
-        await fs.outputFile(path.join(tempDir, 'astrical.yml'), 'name: test-project');
+        await fs.outputFile(path.join(tempDir, 'nexical.yml'), 'name: test-project');
 
         const originalCwd = process.cwd();
         try {
             process.chdir(tempDir);
 
-            // Use runInit to ensure checks run (which will read astrical.yml)
+            // Use runInit to ensure checks run (which will read nexical.yml)
             console.log(`[TEST] Running clean in ${tempDir}`);
             await command.init();
             await command.runInit({ debug: true });

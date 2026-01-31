@@ -1,4 +1,4 @@
-name: Deploy Astrical CLI
+name: Deploy Nexical CLI
 
 on:
   push:

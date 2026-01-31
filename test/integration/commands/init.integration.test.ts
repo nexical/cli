@@ -17,7 +17,7 @@ describe('InitCommand Integration', () => {
         // precise setup of a starter repo
         starterRepoDir = await createMockRepo(starterDir, {
             'package.json': JSON.stringify({
-                name: 'astrical-starter',
+                name: 'nexical-starter',
                 version: '0.0.0',
                 dependencies: {
                     'is-odd': '3.0.1'
@@ -43,7 +43,7 @@ describe('InitCommand Integration', () => {
     it('should initialize a new project from a local git repo', async () => {
         const targetProjectName = 'my-new-project';
         const targetPath = path.join(tempDir, targetProjectName);
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
 
         const command = new InitCommand(cli);
 

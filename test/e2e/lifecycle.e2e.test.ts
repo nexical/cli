@@ -57,7 +57,7 @@ if (args[0] === 'build') {
                 }
             }),
             'README.md': '# E2E Starter',
-            'astrical.yml': 'name: e2e-test\nversion: 0.0.1', // ESSENTIAL for CLI to recognize project
+            'nexical.yml': 'name: e2e-test\nversion: 0.0.1', // ESSENTIAL for CLI to recognize project
             'src/pages/index.astro': '--- ---',
             'src/core/index.ts': '// core',
             'src/core/package.json': JSON.stringify({
@@ -96,7 +96,7 @@ if (args[0] === 'build') {
         };
 
         // --- STEP 1: INIT ---
-        // Run: astrical init my-project --repo <starter>
+        // Run: nexical init my-project --repo <starter>
         const initResult = await runCLI([
             'init',
             'my-project',
@@ -111,7 +111,7 @@ if (args[0] === 'build') {
         expect(fs.existsSync(path.join(projectDir, 'node_modules', 'astro'))).toBe(true);
 
         // --- STEP 2: MODULE ADD ---
-        // Run: astrical module add <module>
+        // Run: nexical module add <module>
         const modResult = await runCLI([
             'module',
             'add',
@@ -126,7 +126,7 @@ if (args[0] === 'build') {
         expect(fs.existsSync(path.join(projectDir, 'src/modules/my-test-module'))).toBe(true);
 
         // --- STEP 3: BUILD ---
-        // Run: astrical build
+        // Run: nexical build
         // Should trigger our mock astro binary
         const buildResult = await runCLI(['build'], projectDir, { env });
 
@@ -139,7 +139,7 @@ if (args[0] === 'build') {
         expect(buildResult.stdout).toContain('MOCK_ASTRO_EXECUTED build');
 
         // --- STEP 4: PREVIEW ---
-        // Run: astrical preview
+        // Run: nexical preview
         // Should trigger mock astro preview
         const previewResult = await runCLI(['preview'], projectDir, { env });
         // NOTE: Real astro preview blocks. Our mock bin just prints and exits.
@@ -148,7 +148,7 @@ if (args[0] === 'build') {
         expect(previewResult.stdout).toContain('MOCK_ASTRO_EXECUTED preview');
 
         // --- STEP 5: CLEAN ---
-        // Run: astrical clean
+        // Run: nexical clean
         const cleanResult = await runCLI(['clean'], projectDir, { env });
 
         expect(cleanResult.exitCode).toBe(0);

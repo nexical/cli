@@ -6,8 +6,8 @@ import fs from 'node:fs';
  * Discovers command directories to load into the CLI.
  * 
  * Scans for:
- * 1. Core commands (projectRoot/src/core/commands)
- * 2. Module commands (projectRoot/src/modules/ * /commands)
+ * 1. Core commands (projectRoot/src/commands)
+ * 2. Module commands (projectRoot/src/modules/ * /src/commands)
  * 
  * @param projectRoot - The root directory of the project
  * @returns Array of absolute paths to command directories
@@ -33,15 +33,12 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
     // Search in projectRoot
     const possibleCorePaths = [
         path.join(projectRoot, 'src/commands'),
-        path.join(projectRoot, 'src/core/src/commands'),
     ];
 
     possibleCorePaths.forEach(addDir);
 
     // 2. Module commands
-    // 2. Module commands (src/modules for standalone CLI, modules for platform)
     const possibleModuleDirs = [
-        path.join(projectRoot, 'src/modules'),
         path.join(projectRoot, 'modules')
     ];
 
@@ -67,8 +64,7 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
         }
     });
 
-    // 3. Package commands (e.g. platform/core/packages/*)
-    // This assumes we are running in the context of platform/core or similar workspace
+    // 3. Package commands (e.g. packages/*)
     const packagesDir = path.join(projectRoot, 'packages');
     if (fs.existsSync(packagesDir)) {
         try {
@@ -85,26 +81,6 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
             }
         } catch (e: any) {
             logger.debug(`Error scanning packages directory: ${e.message}`);
-        }
-    }
-
-    // 4. Platform Core Packages (e.g. platform/core/packages/*)
-    const platformPackagesDir = path.join(projectRoot, 'platform/core/packages');
-    if (fs.existsSync(platformPackagesDir)) {
-        try {
-            const packages = fs.readdirSync(platformPackagesDir);
-            for (const pkg of packages) {
-                if (pkg.startsWith('.')) continue;
-
-                const pkgPath = path.join(platformPackagesDir, pkg);
-                const pkgCommands = path.join(pkgPath, 'src/commands');
-
-                if (fs.existsSync(pkgCommands) && fs.statSync(pkgCommands).isDirectory()) {
-                    addDir(pkgCommands);
-                }
-            }
-        } catch (e: any) {
-            logger.debug(`Error scanning platform packages directory: ${e.message}`);
         }
     }
 

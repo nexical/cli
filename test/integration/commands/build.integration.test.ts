@@ -58,7 +58,7 @@ describe('BuildCommand Integration', () => {
     });
 
     it('should assemble environment and spawn astro build', async () => {
-        const cli = new CLI({ commandName: 'astrical' });
+        const cli = new CLI({ commandName: 'nexical' });
         const command = new BuildCommand(cli);
         Object.assign(command, { projectRoot: projectDir });
 

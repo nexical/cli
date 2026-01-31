@@ -32,7 +32,7 @@ describe('ModuleListCommand', () => {
         vi.spyOn(command, 'success').mockImplementation(() => { });
         vi.spyOn(command, 'info').mockImplementation(() => { });
         vi.mocked(fs.pathExists).mockImplementation(async (p: any) => {
-            if (p.includes('app.yml') || p.includes('astrical.yml')) return true;
+            if (p.includes('app.yml') || p.includes('nexical.yml')) return true;
             return true;
         });
         vi.spyOn(process, 'exit').mockImplementation((() => { }) as any);
@@ -74,7 +74,7 @@ describe('ModuleListCommand', () => {
         // Mock package.json existence: mod1=yes, mod2=no, mod3=yes
         // Also ensure modules directory itself exists!
         vi.mocked(fs.pathExists).mockImplementation(async (p: any) => {
-            if (p.includes('app.yml') || p.includes('astrical.yml')) return true;
+            if (p.includes('app.yml') || p.includes('nexical.yml')) return true;
             if (p.endsWith('src/modules')) return true;
             return p.includes('package.json') && !p.includes('mod2');
         });

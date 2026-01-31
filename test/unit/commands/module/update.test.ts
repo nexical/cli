@@ -30,7 +30,7 @@ describe('ModuleUpdateCommand', () => {
         vi.spyOn(command, 'success').mockImplementation((() => { }) as any);
         vi.spyOn(command, 'info').mockImplementation((() => { }) as any);
         vi.mocked(fs.pathExists).mockImplementation(async (p: string) => {
-            if (p.includes('app.yml') || p.includes('astrical.yml')) return true;
+            if (p.includes('app.yml') || p.includes('nexical.yml')) return true;
             return true;
         });
         vi.spyOn(process, 'exit').mockImplementation((() => { }) as any);
