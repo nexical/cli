@@ -42,7 +42,7 @@ export default class InitCommand extends BaseCommand {
         }
 
         try {
-            this.info('Cloning starter repository...');
+            this.info('Cloning core repository...');
             await git.clone(repoUrl, targetPath, { recursive: true });
 
             this.info('Updating submodules...');
@@ -73,7 +73,7 @@ export default class InitCommand extends BaseCommand {
             }
 
             await git.addAll(targetPath);
-            await git.commit('Initial commit', targetPath);
+            await git.commit('Initial site commit', targetPath);
 
             this.success(`Project initialized successfully in ${directory}!`);
 
