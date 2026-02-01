@@ -22,7 +22,9 @@ vi.mock('../../../src/utils/git.js', () => ({
     deleteBranch: vi.fn(),
     renameBranch: vi.fn(),
     removeRemote: vi.fn(),
-    branchExists: vi.fn()
+    branchExists: vi.fn(),
+    renameRemote: vi.fn(),
+    getRemoteUrl: vi.fn()
 }));
 
 vi.mock('fs-extra');
@@ -36,7 +38,6 @@ describe('InitCommand', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         command = new InitCommand({});
-
         vi.spyOn(command, 'error').mockImplementation((() => { }) as any);
         vi.spyOn(command, 'info').mockImplementation((() => { }) as any);
         vi.spyOn(command, 'success').mockImplementation((() => { }) as any);
@@ -66,7 +67,6 @@ describe('InitCommand', () => {
 
     it('should initialize project with default repo', async () => {
         const targetDir = 'new-project';
-        vi.mocked(git.branchExists).mockResolvedValue(true);
         await command.run({ directory: targetDir, repo: 'https://default.com/repo' });
 
         expect(fs.mkdir).toHaveBeenCalledWith(expect.stringContaining(targetDir), { recursive: true });
@@ -83,60 +83,31 @@ describe('InitCommand', () => {
             expect.stringContaining(targetDir)
         );
 
-        // History wipe
-        vi.mocked(git.branchExists).mockResolvedValue(true);
+        // Remote rename
+        expect(git.renameRemote).toHaveBeenCalledWith('origin', 'upstream', expect.stringContaining(targetDir));
 
-        expect(git.checkoutOrphan).toHaveBeenCalledWith('new-main', expect.stringContaining(targetDir));
+        // Version and Config creation
+        expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining('nexical.yaml'), expect.stringContaining('name: new-project'));
+        expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining('VERSION'), '0.1.0');
+
         expect(git.addAll).toHaveBeenCalledWith(expect.stringContaining(targetDir));
-        expect(git.commit).toHaveBeenCalledWith('Initial commit', expect.stringContaining(targetDir));
-
-        // Wait for potential async calls to finish
-        expect(git.branchExists).toHaveBeenCalledWith('main', expect.stringContaining(targetDir));
-        expect(git.branchExists).toHaveBeenCalledWith('master', expect.stringContaining(targetDir));
-
-        expect(git.deleteBranch).toHaveBeenCalledTimes(2); // main and master
-        expect(git.renameBranch).toHaveBeenCalledWith('main', expect.stringContaining(targetDir));
-        expect(git.removeRemote).toHaveBeenCalledWith('origin', expect.stringContaining(targetDir));
-
-        // Seeding check: Should check for core being present
-        expect(fs.pathExists).toHaveBeenCalledWith(expect.stringContaining('src/core/public-default'));
+        expect(git.commit).toHaveBeenCalledWith('Initial site commit', expect.stringContaining(targetDir));
 
         expect(command.success).toHaveBeenCalledWith(expect.stringContaining('successfully'));
     });
 
-    it('should seed project with core defaults', async () => {
-        const targetDir = 'seeded-project';
-        vi.mocked(git.branchExists).mockResolvedValue(true);
-
-        // Simulate core folders existing
+    it('should skip version and config creation if they already exist', async () => {
+        const targetDir = 'existing-files';
         vi.mocked(fs.pathExists as any).mockImplementation(async (p: string) => {
-            if (p.includes('src/core/public-default')) return true;
-            if (p.includes('src/core/content-default')) return true;
+            if (p.includes('nexical.yaml')) return true;
+            if (p.includes('VERSION')) return true;
             return false;
         });
 
         await command.run({ directory: targetDir, repo: 'foo' });
 
-        // Public seed
-        expect(fs.copy).toHaveBeenCalledWith(
-            expect.stringContaining('src/core/public-default'),
-            expect.stringContaining('public'),
-            expect.objectContaining({ overwrite: false })
-        );
-
-        // Content seed
-        expect(fs.copy).toHaveBeenCalledWith(
-            expect.stringContaining('src/core/content-default'),
-            expect.stringContaining('content'),
-            expect.objectContaining({ overwrite: false })
-        );
-
-        // Should NOT refer to src/content anymore
-        expect(fs.copy).not.toHaveBeenCalledWith(
-            expect.anything(),
-            expect.stringContaining('src/content'),
-            expect.anything()
-        );
+        expect(fs.writeFile).not.toHaveBeenCalledWith(expect.stringContaining('nexical.yaml'), expect.anything());
+        expect(fs.writeFile).not.toHaveBeenCalledWith(expect.stringContaining('VERSION'), expect.anything());
     });
 
     it('should handle gh@ syntax', async () => {

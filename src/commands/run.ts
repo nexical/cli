@@ -1,4 +1,4 @@
-import { CommandDefinition, BaseCommand, logger } from '@nexical/cli-core';
+import { type CommandDefinition, BaseCommand, logger } from '@nexical/cli-core';
 import fs from 'fs-extra';
 import path from 'path';
 import { spawn } from 'child_process';

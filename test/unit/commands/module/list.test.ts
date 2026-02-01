@@ -75,7 +75,7 @@ describe('ModuleListCommand', () => {
         // Also ensure modules directory itself exists!
         vi.mocked(fs.pathExists).mockImplementation(async (p: any) => {
             if (p.includes('app.yml') || p.includes('nexical.yml')) return true;
-            if (p.endsWith('src/modules')) return true;
+            if (p.endsWith('/modules')) return true;
             return p.includes('package.json') && !p.includes('mod2');
         });
 

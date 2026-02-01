@@ -69,7 +69,7 @@ describe('ModuleUpdateCommand', () => {
     it('should update specific module', async () => {
         await command.run({ name: 'mod' });
         expect(runCommand).toHaveBeenCalledWith(
-            expect.stringContaining('git submodule update --remote --merge src/modules/mod'),
+            expect.stringContaining('git submodule update --remote --merge modules/mod'),
             '/mock/root'
         );
     });

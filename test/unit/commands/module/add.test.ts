@@ -20,7 +20,19 @@ vi.mock('@nexical/cli-core', async (importOriginal) => {
     };
 });
 vi.mock('fs-extra');
-vi.mock('../../../../src/utils/git.js');
+vi.mock('../../../../src/utils/git.js', () => ({
+    clone: vi.fn(),
+    updateSubmodules: vi.fn(),
+    checkoutOrphan: vi.fn(),
+    addAll: vi.fn(),
+    commit: vi.fn(),
+    deleteBranch: vi.fn(),
+    renameBranch: vi.fn(),
+    removeRemote: vi.fn(),
+    branchExists: vi.fn(),
+    renameRemote: vi.fn(),
+    getRemoteUrl: vi.fn()
+}));
 
 describe('ModuleAddCommand', () => {
     let command: ModuleAddCommand;
@@ -141,7 +153,7 @@ describe('ModuleAddCommand', () => {
 
         // Should use submodule add
         expect(runCommand).toHaveBeenCalledWith(
-            expect.stringContaining('git submodule add https://github.com/org/repo.git src/modules/my-module'),
+            expect.stringContaining('git submodule add https://github.com/org/repo.git modules/my-module'),
             '/mock/root'
         );
 

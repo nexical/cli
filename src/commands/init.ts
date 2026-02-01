@@ -1,4 +1,4 @@
-import { CommandDefinition, BaseCommand, logger, runCommand } from '@nexical/cli-core';
+import { type CommandDefinition, BaseCommand, logger, runCommand } from '@nexical/cli-core';
 import * as git from '../utils/git.js';
 import { resolveGitUrl } from '../utils/url-resolver.js';
 import fs from 'fs-extra';

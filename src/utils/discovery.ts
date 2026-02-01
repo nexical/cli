@@ -21,6 +21,34 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
         if (visited.has(resolved)) return;
 
         if (fs.existsSync(resolved)) {
+            // Check if we already have a similar path (e.g. dist/src/commands vs src/commands)
+            // If we are adding src/commands and dist/src/commands already exists in visited, skip it
+            // and vice versa.
+            const isSrc = resolved.endsWith(path.join('src', 'commands'));
+            const isDist = resolved.includes(path.join('dist', 'src', 'commands')) ||
+                resolved.endsWith(path.join('dist', 'commands'));
+
+            if (isSrc) {
+                const distEquivalent1 = resolved.replace(path.sep + 'src' + path.sep, path.sep + 'dist' + path.sep + 'src' + path.sep);
+                const distEquivalent2 = resolved.replace(path.sep + 'src' + path.sep, path.sep + 'dist' + path.sep);
+                if (visited.has(distEquivalent1) || visited.has(distEquivalent2)) {
+                    logger.debug(`Skipping ${resolved} because a dist version is already registered`);
+                    return;
+                }
+            }
+
+            if (isDist) {
+                const srcEquivalent1 = resolved.replace(path.sep + 'dist' + path.sep, path.sep);
+                const srcEquivalent2 = resolved.replace(path.sep + 'dist' + path.sep + 'src' + path.sep, path.sep + 'src' + path.sep);
+                if (visited.has(srcEquivalent1) || visited.has(srcEquivalent2)) {
+                    // If we just added src, and now we find dist, we should actually REPLACE src with dist
+                    // but for now, the loop order prefers dist, so this case shouldn't happen much.
+                    // However, let's keep it simple.
+                    logger.debug(`Skipping ${resolved} because a src version is already registered`);
+                    return;
+                }
+            }
+
             logger.debug(`Found command directory: ${resolved}`);
             directories.push(resolved);
             visited.add(resolved);
@@ -39,7 +67,8 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
 
     // 2. Module commands
     const possibleModuleDirs = [
-        path.join(projectRoot, 'modules')
+        path.join(projectRoot, 'modules'),
+        path.join(projectRoot, 'src', 'modules') // Support both flat and src-nested
     ];
 
     possibleModuleDirs.forEach(modulesDir => {
@@ -51,11 +80,20 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
                     if (mod.startsWith('.')) continue;
 
                     const modPath = path.join(modulesDir, mod);
-                    // Check for src/commands inside the module
-                    const modCommands = path.join(modPath, 'src/commands');
+                    if (!fs.statSync(modPath).isDirectory()) continue;
 
-                    if (fs.existsSync(modCommands) && fs.statSync(modCommands).isDirectory()) {
-                        addDir(modCommands);
+                    // Check for commands inside the module/package
+                    // Order matters: prefer dist if it exists
+                    const possibleCmdPaths = [
+                        path.join(modPath, 'dist/src/commands'),
+                        path.join(modPath, 'dist/commands'),
+                        path.join(modPath, 'src/commands')
+                    ];
+
+                    for (const cmdPath of possibleCmdPaths) {
+                        if (fs.existsSync(cmdPath) && fs.statSync(cmdPath).isDirectory()) {
+                            addDir(cmdPath);
+                        }
                     }
                 }
             } catch (e: any) {
@@ -73,10 +111,18 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
                 if (pkg.startsWith('.')) continue;
 
                 const pkgPath = path.join(packagesDir, pkg);
-                const pkgCommands = path.join(pkgPath, 'src/commands');
+                if (!fs.statSync(pkgPath).isDirectory()) continue;
 
-                if (fs.existsSync(pkgCommands) && fs.statSync(pkgCommands).isDirectory()) {
-                    addDir(pkgCommands);
+                const possibleCmdPaths = [
+                    path.join(pkgPath, 'dist/src/commands'),
+                    path.join(pkgPath, 'dist/commands'),
+                    path.join(pkgPath, 'src/commands')
+                ];
+
+                for (const cmdPath of possibleCmdPaths) {
+                    if (fs.existsSync(cmdPath) && fs.statSync(cmdPath).isDirectory()) {
+                        addDir(cmdPath);
+                    }
                 }
             }
         } catch (e: any) {
