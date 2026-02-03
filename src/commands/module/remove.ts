@@ -1,6 +1,7 @@
 import { type CommandDefinition, BaseCommand, logger, runCommand } from '@nexical/cli-core';
 import fs from 'fs-extra';
 import path from 'path';
+import YAML from 'yaml';
 
 export default class ModuleRemoveCommand extends BaseCommand {
     static usage = 'module remove <name>';
@@ -42,9 +43,32 @@ export default class ModuleRemoveCommand extends BaseCommand {
             this.info('Syncing workspace dependencies...');
             await runCommand('npm install', projectRoot);
 
+
+            await this.removeFromConfig(name);
+
             this.success(`Module ${name} removed successfully.`);
         } catch (e: any) {
             this.error(`Failed to remove module: ${e.message}`);
+        }
+    }
+
+    private async removeFromConfig(moduleName: string) {
+        const projectRoot = this.projectRoot as string;
+        const configPath = path.join(projectRoot, 'nexical.yaml');
+
+        if (!await fs.pathExists(configPath)) return;
+
+        try {
+            const content = await fs.readFile(configPath, 'utf8');
+            let config = YAML.parse(content) || {};
+
+            if (config.modules && config.modules.includes(moduleName)) {
+                config.modules = config.modules.filter((m: string) => m !== moduleName);
+                await fs.writeFile(configPath, YAML.stringify(config));
+                logger.debug(`Removed ${moduleName} from nexical.yaml modules list.`);
+            }
+        } catch (e: any) {
+            logger.warn(`Failed to update nexical.yaml: ${e.message}`);
         }
     }
 }

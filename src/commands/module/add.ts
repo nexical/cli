@@ -129,12 +129,41 @@ export default class ModuleAddCommand extends BaseCommand {
             await runCommand(`git submodule add ${cleanUrl} ${relativeTargetDir}`, projectRoot!);
         }
 
+        // Update nexical.yaml
+        await this.addToConfig(moduleName);
+
         // Stage 4: Recurse
         if (dependencies.length > 0) {
             this.info(`Resolving ${dependencies.length} dependencies for ${moduleName}...`);
             for (const depUrl of dependencies) {
                 await this.installModule(depUrl);
             }
+        }
+    }
+
+    private async addToConfig(moduleName: string) {
+        const projectRoot = this.projectRoot as string;
+        const configPath = path.join(projectRoot, 'nexical.yaml');
+
+        if (!await fs.pathExists(configPath)) {
+            // Not strictly required to exist for all operations, but good to have if we are tracking modules.
+            logger.warn('nexical.yaml not found, skipping module list update.');
+            return;
+        }
+
+        try {
+            const content = await fs.readFile(configPath, 'utf8');
+            let config = YAML.parse(content) || {};
+
+            if (!config.modules) config.modules = [];
+
+            if (!config.modules.includes(moduleName)) {
+                config.modules.push(moduleName);
+                await fs.writeFile(configPath, YAML.stringify(config));
+                logger.debug(`Added ${moduleName} to nexical.yaml modules list.`);
+            }
+        } catch (e: any) {
+            logger.warn(`Failed to update nexical.yaml: ${e.message}`);
         }
     }
 }

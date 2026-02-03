@@ -20,25 +20,19 @@ describe('RunCommand Integration', () => {
         projectDir = await createTempDir('run-project-');
         vi.mocked(spawn).mockClear();
 
-        // Setup minimal env
-        await fs.ensureDir(path.join(projectDir, 'src', 'core'));
-        await fs.outputFile(path.join(projectDir, 'src', 'core', 'package.json'), JSON.stringify({
+        // Setup minimal env (New Architecture: no site/ directory)
+        await fs.ensureDir(projectDir);
+        await fs.outputFile(path.join(projectDir, 'package.json'), JSON.stringify({
             name: 'nexical-core',
             scripts: {
                 'test-script': 'echo test'
             }
         }));
-        await fs.ensureDir(path.join(projectDir, 'src', 'modules', 'my-auth'));
-        await fs.outputFile(path.join(projectDir, 'src', 'modules', 'my-auth', 'package.json'), JSON.stringify({
+
+        await fs.ensureDir(path.join(projectDir, 'modules', 'my-auth'));
+        await fs.outputFile(path.join(projectDir, 'modules', 'my-auth', 'package.json'), JSON.stringify({
             scripts: {
                 'seed': 'node seed.js'
-            }
-        }));
-
-        await fs.ensureDir(path.join(projectDir, 'site'));
-        await fs.outputFile(path.join(projectDir, 'site', 'package.json'), JSON.stringify({
-            scripts: {
-                'test-script': 'echo test'
             }
         }));
 
@@ -72,7 +66,7 @@ describe('RunCommand Integration', () => {
             'npm',
             ['run', 'test-script', '--', '--flag'],
             expect.objectContaining({
-                cwd: expect.stringContaining('site')
+                cwd: projectDir
             })
         );
     });
@@ -89,7 +83,7 @@ describe('RunCommand Integration', () => {
             'npm',
             ['run', 'seed', '--', '--force'],
             expect.objectContaining({
-                cwd: expect.stringContaining(path.join('modules', 'my-auth'))
+                cwd: path.resolve(projectDir, 'modules', 'my-auth')
             })
         );
     });

@@ -1,6 +1,7 @@
 import { BaseCommand, logger } from '@nexical/cli-core';
 import fs from 'fs-extra';
 import path from 'path';
+import YAML from 'yaml';
 
 export default class ModuleListCommand extends BaseCommand {
     static usage = 'module list';
@@ -28,15 +29,30 @@ export default class ModuleListCommand extends BaseCommand {
                     let description = '';
 
                     const pkgJsonPath = path.join(modulePath, 'package.json');
+                    const moduleYamlPath = path.join(modulePath, 'module.yaml');
+                    const moduleYmlPath = path.join(modulePath, 'module.yml');
+
+                    let pkg: any = {};
+                    let modConfig: any = {};
+
                     if (await fs.pathExists(pkgJsonPath)) {
                         try {
-                            const pkg = await fs.readJson(pkgJsonPath);
-                            version = pkg.version || 'unknown';
-                            description = pkg.description || '';
-                        } catch (e) {
-                            // ignore
-                        }
+                            pkg = await fs.readJson(pkgJsonPath);
+                        } catch (e) { /* ignore */ }
                     }
+
+                    if (await fs.pathExists(moduleYamlPath) || await fs.pathExists(moduleYmlPath)) {
+                        try {
+                            const configPath = await fs.pathExists(moduleYamlPath) ? moduleYamlPath : moduleYmlPath;
+                            const content = await fs.readFile(configPath, 'utf8');
+                            modConfig = YAML.parse(content) || {};
+                        } catch (e) { /* ignore */ }
+                    }
+
+                    version = pkg.version || 'unknown';
+                    description = modConfig.description || pkg.description || '';
+                    // Optionally use display name from module.yaml if present, but strictly list is usually dir name.
+                    // Let's stick to dir name for "name" column, but description from module.yaml is good.
                     validModules.push({ name: moduleName, version, description });
                 }
             }

@@ -3,7 +3,6 @@ import fs from 'fs-extra';
 import path from 'path';
 import { spawn } from 'child_process';
 import process from 'node:process';
-import { linkEnvironment } from '../utils/environment.js';
 
 export default class RunCommand extends BaseCommand {
     static usage = 'run <script> [args...]';
@@ -20,63 +19,52 @@ export default class RunCommand extends BaseCommand {
     async run(options: any) {
         const projectRoot = this.projectRoot as string;
         const script = options.script;
-        const scriptArgs = options.args;
+        const scriptArgs = options.args || [];
 
         if (!script) {
             this.error('Please specify a script to run.');
             return;
         }
 
-        await linkEnvironment(projectRoot!);
-        const siteDir = path.resolve(projectRoot!, 'site');
+        logger.debug('Run command context:', { script, args: scriptArgs, projectRoot });
 
-        logger.debug('Run command context:', { script, args: scriptArgs, siteDir });
+        let execPath = projectRoot;
+        let scriptName = script;
 
-        // Initialize command to default npm run
-        const finalCmd = 'npm';
-        let finalArgs = null;
-        let execPath = null;
-
-        // Check for module:script syntax
+        // Handle module:script syntax
         if (script.includes(':')) {
-            const [moduleName, scriptName] = script.split(':');
-            const modulePath = path.resolve(siteDir, 'modules', moduleName);
-            logger.debug(`Resolving module script: ${moduleName}:${scriptName} at ${modulePath}`);
+            const [moduleName, name] = script.split(':');
+            execPath = path.resolve(projectRoot, 'modules', moduleName);
+            scriptName = name;
 
-            // Check if script exists
-            const modulePkgJsonPath = path.join(modulePath, 'package.json');
-            if (await fs.pathExists(modulePkgJsonPath)) {
-                try {
-                    const pkg = await fs.readJson(modulePkgJsonPath);
-                    if (!pkg.scripts || !pkg.scripts[scriptName]) {
-                        this.error(`Script ${scriptName} does not exist in module ${moduleName}`);
-                        return;
-                    }
-                } catch (e: any) {
-                    this.error(`Failed to read package.json for module ${moduleName}: ${e.message}`);
-                    return;
-                }
-            } else {
-                this.error(`Failed to find package.json for module ${moduleName}`);
-                return;
-            }
-            finalArgs = ['run', scriptName, '--', ...scriptArgs];
-            execPath = modulePath;
-
+            logger.debug(`Resolving module script: ${moduleName}:${scriptName} at ${execPath}`);
         } else {
-            const corePkgJsonPath = path.join(siteDir, 'package.json');
-            const pkg = await fs.readJson(corePkgJsonPath);
-            if (!pkg.scripts || !pkg.scripts[script]) {
-                this.error(`Script ${script} does not exist in Nexical core`);
-                return;
-            }
-            finalArgs = ['run', script, '--', ...scriptArgs];
-            execPath = siteDir;
+            logger.debug(`Resolving core script: ${scriptName} at ${execPath}`);
         }
 
-        logger.debug(`Executing final command: ${finalCmd} ${finalArgs.join(' ')} `);
+        // Validate script existence
+        const pkgJsonPath = path.join(execPath, 'package.json');
+        if (!(await fs.pathExists(pkgJsonPath))) {
+            this.error(`Failed to find package.json at ${execPath}`);
+            return;
+        }
 
-        const child = spawn(finalCmd, finalArgs, {
+        try {
+            const pkg = await fs.readJson(pkgJsonPath);
+            if (!pkg.scripts || !pkg.scripts[scriptName]) {
+                const type = script.includes(':') ? `module ${script.split(':')[0]}` : 'Nexical core';
+                this.error(`Script "${scriptName}" does not exist in ${type}`);
+                return;
+            }
+        } catch (e: any) {
+            this.error(`Failed to read package.json at ${execPath}: ${e.message}`);
+            return;
+        }
+
+        const finalArgs = ['run', scriptName, '--', ...scriptArgs];
+        logger.debug(`Executing: npm ${finalArgs.join(' ')} in ${execPath}`);
+
+        const child = spawn('npm', finalArgs, {
             cwd: execPath,
             stdio: 'inherit',
             env: {
@@ -96,6 +84,10 @@ export default class RunCommand extends BaseCommand {
 
         await new Promise<void>((resolve) => {
             child.on('close', (code) => {
+                // Remove listeners to prevent memory leaks if this command is run multiple times in-process (e.g. tests)
+                process.off('SIGINT', cleanup);
+                process.off('SIGTERM', cleanup);
+
                 if (code !== 0) {
                     process.exit(code || 1);
                 }

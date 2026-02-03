@@ -34,7 +34,7 @@ describe('Module Commands Integration', () => {
         const temp = await createTempDir('module-project-');
         projectDir = await createMockRepo(temp, {
             'package.json': '{"name": "test-project", "version": "1.0.0"}',
-            'nexical.yml': 'site: test'
+            'nexical.yaml': 'site: test\nmodules: []'
         });
 
         // Allow file protocol for submodules in this repo
@@ -78,15 +78,20 @@ describe('Module Commands Integration', () => {
             await addCmd.init();
             await addCmd.run({ url: moduleRepo, name: 'my-module' });
 
-            const modulePath = path.join(projectDir, 'src/modules/my-module');
+            const modulePath = path.join(projectDir, 'modules/my-module');
             expect(fs.existsSync(modulePath)).toBe(true);
             expect(fs.existsSync(path.join(modulePath, 'package.json'))).toBe(true);
+
+            // Verify nexical.yaml updated
+            const config = await fs.readFile(path.join(projectDir, 'nexical.yaml'), 'utf8');
+            expect(config).toContain('modules:');
+            expect(config).toContain('- my-module');
 
             // Check it is a submodule
             // .git file in module dir pointing to gitdir
             expect(fs.existsSync(path.join(modulePath, '.git'))).toBe(true);
             const gitModules = await fs.readFile(path.join(projectDir, '.gitmodules'), 'utf-8');
-            expect(gitModules).toContain('path = src/modules/my-module');
+            expect(gitModules).toContain('path = modules/my-module');
 
             // 2. LIST MODULES with valid module
             const listCmd = new ModuleListCommand(cli);
@@ -117,16 +122,20 @@ describe('Module Commands Integration', () => {
             expect(fs.existsSync(modulePath)).toBe(false);
 
             // Verify git cleanup
-            // .git/modules/src/modules/my-module should be gone
-            const gitInternalModuleDir = path.join(projectDir, '.git/modules/src/modules/my-module');
+            // .git/modules/modules/my-module should be gone
+            const gitInternalModuleDir = path.join(projectDir, '.git/modules/modules/my-module');
             expect(fs.existsSync(gitInternalModuleDir)).toBe(false);
 
             // .gitmodules entry gone? `git rm` usually handles this.
             // Check if .gitmodules file exists (if empty it might remain or be deleted depending on git version, usually implicitly updated)
             if (fs.existsSync(path.join(projectDir, '.gitmodules'))) {
                 const updatedGitModules = await fs.readFile(path.join(projectDir, '.gitmodules'), 'utf-8');
-                expect(updatedGitModules).not.toContain('src/modules/my-module');
+                expect(updatedGitModules).not.toContain('modules/my-module');
             }
+
+            // Verify nexical.yaml updated
+            const configRemoved = await fs.readFile(path.join(projectDir, 'nexical.yaml'), 'utf8');
+            expect(configRemoved).not.toContain('- my-module');
 
         } finally {
             process.chdir(originalCwd);
