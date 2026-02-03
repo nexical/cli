@@ -169,7 +169,8 @@ describe('discoverCommandDirectories', () => {
 
         const dirs = discoverCommandDirectories(cwd);
         // Should process mod1, ignore file.txt
-        expect(dirs).toContain(path.resolve('/app/modules/mod1/src/commands'));
+        // The logic prefers dist/src/commands if it exists, and our mock returns true for all existsSync
+        expect(dirs).toContain(path.resolve('/app/modules/mod1/dist/src/commands'));
         expect(dirs).not.toContain(path.resolve('/app/modules/file.txt/src/commands'));
     });
 });

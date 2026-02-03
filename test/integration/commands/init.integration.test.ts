@@ -65,11 +65,12 @@ describe('InitCommand Integration', () => {
         // 3. Check git initialization
         expect(fs.existsSync(path.join(targetPath, '.git'))).toBe(true);
 
-        // 4. Check it's a fresh repository (no history from starter)
+        // 4. Check git initialization (history should be preserved + one new commit)
         const { stdout: log } = await execa('git', ['log', '--oneline'], { cwd: targetPath });
         const lines = log.split('\n').filter(Boolean);
-        expect(lines.length).toBe(1); // Should only have "Initial commit"
-        expect(lines[0]).toContain('Initial commit');
+        expect(lines.length).toBe(2); // Should have "Initial site commit" and "Initial commit"
+        expect(lines[0]).toContain('Initial site commit');
+        expect(lines[1]).toContain('Initial commit');
 
         // 5. Check dependencies (optional, but command tries to install them)
         // Since we are mocking the repo, it doesn't have a real lockfile or valid deps,

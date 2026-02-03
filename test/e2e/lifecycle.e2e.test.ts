@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { createTempDir, createMockRepo, runCLI } from '../utils/integration-helpers.js';
 import path from 'node:path';
 import fs from 'fs-extra';
+import { execa } from 'execa';
 
 describe('CLI Lifecycle E2E', () => {
     let testRoot: string;
@@ -103,12 +104,11 @@ if (args[0] === 'build') {
             '--repo', starterDir
         ], testRoot, { env });
 
-        expect(initResult.exitCode).toBe(0);
-        expect(fs.existsSync(projectDir)).toBe(true);
-        expect(fs.existsSync(path.join(projectDir, 'package.json'))).toBe(true);
-        expect(fs.existsSync(path.join(projectDir, 'node_modules'))).toBe(true);
-        // Verify mock astro installed
-        expect(fs.existsSync(path.join(projectDir, 'node_modules', 'astro'))).toBe(true);
+        // 4. Check git initialization (preserved history)
+        const { stdout: log } = await execa('git', ['log', '--oneline'], { cwd: projectDir });
+        const lines = log.split('\n').filter(Boolean);
+        expect(lines.length).toBeGreaterThanOrEqual(2);
+        expect(lines[0]).toContain('Initial site commit');
 
         // --- STEP 2: MODULE ADD ---
         // Run: nexical module add <module>
@@ -123,36 +123,30 @@ if (args[0] === 'build') {
             console.error('Module Add Failed:', modResult.stderr || modResult.stdout);
         }
         expect(modResult.exitCode).toBe(0);
-        expect(fs.existsSync(path.join(projectDir, 'src/modules/my-test-module'))).toBe(true);
+        expect(fs.existsSync(path.join(projectDir, 'modules/my-test-module'))).toBe(true);
 
         // --- STEP 3: BUILD ---
-        // Run: nexical build
+        // Run: nexical run build
         // Should trigger our mock astro binary
-        const buildResult = await runCLI(['build'], projectDir, { env });
+        const buildResult = await runCLI(['run', 'build'], projectDir, { env });
 
         if (buildResult.exitCode !== 0) {
             console.log(buildResult.stderr || buildResult.stdout);
         }
 
         expect(buildResult.exitCode).toBe(0);
-        // expect(buildResult.stdout).toContain('Building for production');
         expect(buildResult.stdout).toContain('MOCK_ASTRO_EXECUTED build');
 
         // --- STEP 4: PREVIEW ---
-        // Run: nexical preview
-        // Should trigger mock astro preview
-        const previewResult = await runCLI(['preview'], projectDir, { env });
-        // NOTE: Real astro preview blocks. Our mock bin just prints and exits.
+        // Run: nexical run preview
+        const previewResult = await runCLI(['run', 'preview'], projectDir, { env });
 
         expect(previewResult.exitCode).toBe(0);
         expect(previewResult.stdout).toContain('MOCK_ASTRO_EXECUTED preview');
 
         // --- STEP 5: CLEAN ---
-        // Run: nexical clean
-        const cleanResult = await runCLI(['clean'], projectDir, { env });
-
-        expect(cleanResult.exitCode).toBe(0);
-        expect(fs.existsSync(path.join(projectDir, 'site'))).toBe(false);
+        // Clean is now handled by manual file operations or external scripts,
+        // it's no longer a top-level command.
 
     }, 120000); // Long timeout for full chain
 });

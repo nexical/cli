@@ -15,9 +15,7 @@ vi.mock('@nexical/cli-core', async (importOriginal) => {
 });
 vi.mock('fs-extra');
 vi.mock('child_process');
-vi.mock('../../../src/utils/environment.js', () => ({
-    linkEnvironment: vi.fn().mockResolvedValue(undefined)
-}));
+vi.mock('child_process');
 
 describe('RunCommand', () => {
     let command: RunCommand;
@@ -89,12 +87,8 @@ describe('RunCommand', () => {
         // run(options)
         await command.run({ script: 'test', args: [] });
 
-        const { linkEnvironment } = await import('../../../src/utils/environment.js');
-        // Because of the mock implementation in beforeEach/file scope, we might need to ensure it resolves.
-        // It is mocked at line 18: vi.mock(..., () => ({ linkEnvironment: vi.fn().mockResolvedValue(undefined) }))
-
         expect(cp.spawn).toHaveBeenCalledWith('npm', ['run', 'test', '--'], expect.objectContaining({
-            cwd: expect.stringContaining('site')
+            cwd: '/mock/root'
         }));
     });
 
