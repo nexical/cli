@@ -17,7 +17,7 @@ export default class InitCommand extends BaseCommand {
             {
                 name: '--repo <url>',
                 description: 'Starter repository URL (supports gh@owner/repo syntax)',
-                default: 'gh@nexical/app-core'
+                default: 'gh@nexical/app-starter'
             }
         ]
     };
@@ -42,7 +42,7 @@ export default class InitCommand extends BaseCommand {
         }
 
         try {
-            this.info('Cloning core repository...');
+            this.info('Cloning starter repository...');
             await git.clone(repoUrl, targetPath, { recursive: true });
 
             this.info('Updating submodules...');
@@ -54,8 +54,9 @@ export default class InitCommand extends BaseCommand {
             this.info('Setting up upstream remote...');
             await git.renameRemote('origin', 'upstream', targetPath);
 
-            // Ensure module directory
-            await fs.ensureDir(path.join(targetPath, 'modules'));
+            // Run setup script
+            this.info('Running project setup...');
+            await runCommand('npm run setup', targetPath);
 
             // Check for nexical.yaml, if not present create a default one
             const configPath = path.join(targetPath, 'nexical.yaml');
