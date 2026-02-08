@@ -24,7 +24,7 @@ export default class SetupCommand extends BaseCommand {
         }
 
         const apps = ['frontend', 'backend'];
-        const sharedAssets = ['src', 'public', 'astro.config.mjs', 'tsconfig.json']; // tsconfig might be needed if extended
+        const sharedAssets = ['prisma', 'src', 'public', 'locales', 'scripts', 'astro.config.mjs', 'tsconfig.json']; // tsconfig might be needed if extended
 
         for (const app of apps) {
             const appDir = path.join(rootDir, 'apps', app);
