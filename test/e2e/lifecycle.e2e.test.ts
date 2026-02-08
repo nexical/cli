@@ -54,7 +54,8 @@ if (args[0] === 'build') {
                 scripts: {
                     'build': 'astro build',
                     'dev': 'astro dev',
-                    'preview': 'astro preview'
+                    'preview': 'astro preview',
+                    'setup': 'echo setup'
                 }
             }),
             'README.md': '# E2E Starter',

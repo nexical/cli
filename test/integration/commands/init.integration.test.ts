@@ -19,6 +19,9 @@ describe('InitCommand Integration', () => {
             'package.json': JSON.stringify({
                 name: 'nexical-starter',
                 version: '0.0.0',
+                scripts: {
+                    setup: 'echo setup'
+                },
                 dependencies: {
                     'is-odd': '3.0.1'
                 }
