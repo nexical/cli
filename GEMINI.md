@@ -5,6 +5,7 @@ This guide details how to build command libraries and CLIs using the `@nexical/c
 ## Overview
 
 The project is configured to use `@nexical/cli-core` as its CLI framework. usage entails:
+
 1.  **Entry Point**: `index.ts` initializes the `CLI` instance.
 2.  **Command Discovery**: The CLI automatically scans `src/commands` for command files.
 3.  **Command Implementation**: Commands are TypeScript classes extending `BaseCommand`.
@@ -13,11 +14,11 @@ The project is configured to use `@nexical/cli-core` as its CLI framework. usage
 
 Commands are defined in `src/commands`. The file structure directly maps to the command hierarchy.
 
-| File Path | Command | Description |
-| :--- | :--- | :--- |
-| `src/commands/init.ts` | `app init` | Root level command |
-| `src/commands/user/create.ts` | `app user create` | Subcommand |
-| `src/commands/user/index.ts` | `app user` | Parent command handler (optional) |
+| File Path                     | Command           | Description                       |
+| :---------------------------- | :---------------- | :-------------------------------- |
+| `src/commands/init.ts`        | `app init`        | Root level command                |
+| `src/commands/user/create.ts` | `app user create` | Subcommand                        |
+| `src/commands/user/index.ts`  | `app user`        | Parent command handler (optional) |
 
 > **Note**: The CLI name (`app`) is configured in `index.ts`.
 
@@ -44,6 +45,7 @@ export default class HelloCommand extends BaseCommand {
 ```
 
 **Run it:**
+
 ```bash
 npm run cli hello
 ```
@@ -64,33 +66,33 @@ export default class GreetCommand extends BaseCommand {
       {
         name: 'name',
         description: 'Name of the user',
-        required: true
-      }
+        required: true,
+      },
     ],
     // Options (Flags)
     options: [
       {
         name: '--loud',
         description: 'Print in uppercase',
-        default: false
+        default: false,
       },
       {
         name: '-c, --count <n>',
         description: 'Number of times to greet',
-        default: 1
-      }
-    ]
+        default: 1,
+      },
+    ],
   };
 
   async run(options: any) {
     // 'name' is mapped from args
     // 'loud' and 'count' are mapped from options
     const { name, loud, count } = options;
-    
+
     let message = `Hello, ${name}`;
     if (loud) message = message.toUpperCase();
 
-    for(let i=0; i < count; i++) {
+    for (let i = 0; i < count; i++) {
       this.info(message);
     }
   }
@@ -98,6 +100,7 @@ export default class GreetCommand extends BaseCommand {
 ```
 
 **Run it:**
+
 ```bash
 npm run cli greet Adrian --loud --count 3
 ```
@@ -111,7 +114,7 @@ export default class InteractiveCommand extends BaseCommand {
   async run() {
     // Simple confirmation or input
     const name = await this.prompt('What is your name?');
-    
+
     this.success(`Nice to meet you, ${name}`);
   }
 }
@@ -134,8 +137,8 @@ To create grouped commands (e.g., `user create`, `user list`), use directories.
 
 1.  **Create Directory**: `src/commands/user/`
 2.  **Add Commands**:
-    *   `src/commands/user/create.ts` -> `app user create`
-    *   `src/commands/user/list.ts` -> `app user list`
+    - `src/commands/user/create.ts` -> `app user create`
+    - `src/commands/user/list.ts` -> `app user list`
 
 ### Index Commands (Container Commands)
 
@@ -163,22 +166,25 @@ export default class UserCommand extends BaseCommand {
 All commands inherit from `BaseCommand`.
 
 **Properties:**
-*   `cli`: Access to the main `CLI` instance.
-*   `projectRoot`: Path to the project root (if detected).
-*   `config`: Loaded configuration from `{cliName}.yml`.
-*   `globalOptions`: Global flags passed to the CLI (e.g., `--debug`).
+
+- `cli`: Access to the main `CLI` instance.
+- `projectRoot`: Path to the project root (if detected).
+- `config`: Loaded configuration from `{cliName}.yml`.
+- `globalOptions`: Global flags passed to the CLI (e.g., `--debug`).
 
 **Methods:**
-*   `init()`: Called before `run()`. Useful for setup.
-*   `run(options)`: Abstract method. Must be implemented.
-*   `prompt(message)`: Async, returns string.
+
+- `init()`: Called before `run()`. Useful for setup.
+- `run(options)`: Abstract method. Must be implemented.
+- `prompt(message)`: Async, returns string.
 
 **Static Properties:**
-*   `description`: String. Shown in help.
-*   `args`: Object. Defines arguments and options.
-    *   `args`: Array of `{ name, description, required, default }`.
-    *   `options`: Array of `{ name, description, default }`.
-*   `requiresProject`: Boolean. If true, command fails if not run inside a project with a config file.
+
+- `description`: String. Shown in help.
+- `args`: Object. Defines arguments and options.
+  - `args`: Array of `{ name, description, required, default }`.
+  - `options`: Array of `{ name, description, default }`.
+- `requiresProject`: Boolean. If true, command fails if not run inside a project with a config file.
 
 ## Best Practices
 
@@ -189,5 +195,5 @@ All commands inherit from `BaseCommand`.
 
 ## Troubleshooting
 
-*   **Command not found**: Ensure the file exports a class leveraging `export default` and extends `BaseCommand`.
-*   **Changes not reflected**: If using `tsup`, ensure you are building or running in dev mode (`npm run dev`). For `npm run cli` using `ts-node` (via `cli.ts` or similar), changes should be instant.
+- **Command not found**: Ensure the file exports a class leveraging `export default` and extends `BaseCommand`.
+- **Changes not reflected**: If using `tsup`, ensure you are building or running in dev mode (`npm run dev`). For `npm run cli` using `ts-node` (via `cli.ts` or similar), changes should be instant.
