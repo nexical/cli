@@ -12,18 +12,35 @@ const projectRoot = (await findProjectRoot(commandName, process.cwd())) || proce
 const coreCommandsDir = path.resolve(__dirname, './src/commands');
 const additionalCommands = discoverCommandDirectories(projectRoot);
 
-// Filter out the source version of core commands if we are running from dist
+// Filter out duplicate core commands and source versions
 const filteredAdditional = additionalCommands.filter((dir) => {
-  if (dir === coreCommandsDir) return false;
+  const resolvedDir = path.resolve(dir);
+  const resolvedCore = path.resolve(coreCommandsDir);
 
-  // Handle the case where we are running from dist/ and it finds src/commands in projectRoot
-  if (coreCommandsDir.includes(path.join(path.sep, 'dist', 'src', 'commands'))) {
-    const srcVersion = coreCommandsDir.replace(
+  if (resolvedDir === resolvedCore) return false;
+
+  // Check if this is another instance of the core CLI commands (by checking path suffix)
+  const coreSuffix = path.join('@nexical', 'cli', 'dist', 'src', 'commands');
+  const coreSuffixSrc = path.join('packages', 'cli', 'dist', 'src', 'commands');
+  const coreSuffixRawSrc = path.join('packages', 'cli', 'src', 'commands');
+
+  if (
+    resolvedDir.endsWith(coreSuffix) ||
+    resolvedDir.endsWith(coreSuffixSrc) ||
+    resolvedDir.endsWith(coreSuffixRawSrc)
+  ) {
+    return false;
+  }
+
+  // Handle mismatch between dist/src and src/
+  if (resolvedCore.includes(path.join(path.sep, 'dist', 'src', 'commands'))) {
+    const srcVersion = resolvedCore.replace(
       path.join(path.sep, 'dist', 'src', 'commands'),
       path.join(path.sep, 'src', 'commands'),
     );
-    if (dir === srcVersion) return false;
+    if (resolvedDir === srcVersion) return false;
   }
+
   return true;
 });
 

@@ -16,135 +16,99 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
   const directories: string[] = [];
   const visited = new Set<string>();
 
+  const isTsEnvironment =
+    process.argv[1]?.endsWith('.ts') ||
+    process.execArgv.some((arg) => arg.includes('tsx') || arg.includes('ts-node'));
+
   const addDir = (dir: string) => {
     const resolved = path.resolve(dir);
+    if (!fs.existsSync(resolved)) {
+      logger.debug(`Command directory not found (skipping): ${resolved}`);
+      return;
+    }
+
     if (visited.has(resolved)) return;
 
-    if (fs.existsSync(resolved)) {
-      // Check if we already have a similar path (e.g. dist/src/commands vs src/commands)
-      // If we are adding src/commands and dist/src/commands already exists in visited, skip it
-      // and vice versa.
-      const isSrc = resolved.endsWith(path.join('src', 'commands'));
-      const isDist =
-        resolved.includes(path.join('dist', 'src', 'commands')) ||
-        resolved.endsWith(path.join('dist', 'commands'));
+    const isSrcDir = resolved.includes(path.join(path.sep, 'src', 'commands'));
 
-      if (isSrc) {
-        const distEquivalent1 = resolved.replace(
-          path.sep + 'src' + path.sep,
-          path.sep + 'dist' + path.sep + 'src' + path.sep,
-        );
-        const distEquivalent2 = resolved.replace(
-          path.sep + 'src' + path.sep,
-          path.sep + 'dist' + path.sep,
-        );
-        if (visited.has(distEquivalent1) || visited.has(distEquivalent2)) {
-          logger.debug(`Skipping ${resolved} because a dist version is already registered`);
-          return;
-        }
+    // Strict check: if we are adding a 'src' directory...
+    if (isSrcDir) {
+      // 1. Check if an equivalent 'dist' exists in the same package
+      const distPath1 = resolved.replace(
+        path.join(path.sep, 'src', 'commands'),
+        path.join(path.sep, 'dist', 'src', 'commands'),
+      );
+      const distPath2 = resolved.replace(
+        path.join(path.sep, 'src', 'commands'),
+        path.join(path.sep, 'dist', 'commands'),
+      );
+
+      if (fs.existsSync(distPath1) || fs.existsSync(distPath2)) {
+        logger.debug(`Skipping src commands at ${resolved} because dist exists`);
+        return;
       }
 
-      if (isDist) {
-        const srcEquivalent1 = resolved.replace(path.sep + 'dist' + path.sep, path.sep);
-        const srcEquivalent2 = resolved.replace(
-          path.sep + 'dist' + path.sep + 'src' + path.sep,
-          path.sep + 'src' + path.sep,
-        );
-        if (visited.has(srcEquivalent1) || visited.has(srcEquivalent2)) {
-          // If we just added src, and now we find dist, we should actually REPLACE src with dist
-          // but for now, the loop order prefers dist, so this case shouldn't happen much.
-          // However, let's keep it simple.
-          logger.debug(`Skipping ${resolved} because a src version is already registered`);
-          return;
-        }
+      // 2. If no TS loader, skip src/commands entirely IF it's likely to contain .ts
+      if (!isTsEnvironment) {
+        logger.debug(`Skipping src commands at ${resolved}: no TS loader detected`);
+        return;
       }
-
-      logger.debug(`Found command directory: ${resolved}`);
-      directories.push(resolved);
-      visited.add(resolved);
-    } else {
-      logger.debug(`Command directory not found (skipping): ${resolved}`);
     }
+
+    logger.debug(`Found command directory: ${resolved}`);
+    directories.push(resolved);
+    visited.add(resolved);
   };
 
   // 1. Core commands
-  // Search in projectRoot
   const possibleCorePaths = [path.join(projectRoot, 'src/commands')];
-
   possibleCorePaths.forEach(addDir);
 
-  // 2. Module commands
-  const possibleModuleDirs = [
+  // 2. Module & Package commands
+  const searchRoots = [
     path.join(projectRoot, 'modules'),
-    path.join(projectRoot, 'src', 'modules'), // Support both flat and src-nested
+    path.join(projectRoot, 'src', 'modules'),
+    path.join(projectRoot, 'packages'),
   ];
 
-  possibleModuleDirs.forEach((modulesDir) => {
-    if (fs.existsSync(modulesDir)) {
-      try {
-        const modules = fs.readdirSync(modulesDir);
-        for (const mod of modules) {
-          // exclude system files/dirs like .keep
-          if (mod.startsWith('.')) continue;
+  searchRoots.forEach((root) => {
+    if (!fs.existsSync(root)) return;
+    try {
+      const entries = fs.readdirSync(root);
+      for (const entry of entries) {
+        if (entry.startsWith('.')) continue;
+        const entryPath = path.join(root, entry);
+        if (!fs.statSync(entryPath).isDirectory()) continue;
 
-          const modPath = path.join(modulesDir, mod);
-          if (!fs.statSync(modPath).isDirectory()) continue;
+        // Preference: dist/src/commands > dist/commands > src/commands
+        const possiblePaths = [
+          path.join(entryPath, 'dist/src/commands'),
+          path.join(entryPath, 'dist/commands'),
+          path.join(entryPath, 'src/commands'),
+        ];
 
-          // Check for commands inside the module/package
-          // Order matters: prefer dist if it exists
-          const possibleCmdPaths = [
-            path.join(modPath, 'dist/src/commands'),
-            path.join(modPath, 'dist/commands'),
-            path.join(modPath, 'src/commands'),
-          ];
-
-          for (const cmdPath of possibleCmdPaths) {
-            if (fs.existsSync(cmdPath) && fs.statSync(cmdPath).isDirectory()) {
-              addDir(cmdPath);
+        let foundDist = false;
+        for (const p of possiblePaths) {
+          if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+            if (p.includes(path.sep + 'dist' + path.sep)) {
+              addDir(p);
+              foundDist = true;
+              break; // Found a dist version, skip others for this entry
             }
           }
         }
-      } catch (e: unknown) {
-        if (e instanceof Error) {
-          logger.debug(`Error scanning modules directory ${modulesDir}: ${e.message}`);
-        } else {
-          logger.debug(`Error scanning modules directory ${modulesDir}: ${String(e)}`);
-        }
-      }
-    }
-  });
 
-  // 3. Package commands (e.g. packages/*)
-  const packagesDir = path.join(projectRoot, 'packages');
-  if (fs.existsSync(packagesDir)) {
-    try {
-      const packages = fs.readdirSync(packagesDir);
-      for (const pkg of packages) {
-        if (pkg.startsWith('.')) continue;
-
-        const pkgPath = path.join(packagesDir, pkg);
-        if (!fs.statSync(pkgPath).isDirectory()) continue;
-
-        const possibleCmdPaths = [
-          path.join(pkgPath, 'dist/src/commands'),
-          path.join(pkgPath, 'dist/commands'),
-          path.join(pkgPath, 'src/commands'),
-        ];
-
-        for (const cmdPath of possibleCmdPaths) {
-          if (fs.existsSync(cmdPath) && fs.statSync(cmdPath).isDirectory()) {
-            addDir(cmdPath);
+        if (!foundDist) {
+          const srcPath = path.join(entryPath, 'src/commands');
+          if (fs.existsSync(srcPath) && fs.statSync(srcPath).isDirectory()) {
+            addDir(srcPath);
           }
         }
       }
     } catch (e: unknown) {
-      if (e instanceof Error) {
-        logger.debug(`Error scanning packages directory: ${e.message}`);
-      } else {
-        logger.debug(`Error scanning packages directory: ${String(e)}`);
-      }
+      logger.debug(`Error scanning root ${root}: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }
+  });
 
   return directories;
 }
