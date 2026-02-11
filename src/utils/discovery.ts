@@ -18,7 +18,12 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
 
   const isTsEnvironment =
     process.argv[1]?.endsWith('.ts') ||
-    process.execArgv.some((arg) => arg.includes('tsx') || arg.includes('ts-node'));
+    process.argv[1]?.endsWith('.mts') ||
+    process.execArgv.some(
+      (arg) => arg.includes('tsx') || arg.includes('ts-node') || arg.includes('vitest'),
+    ) ||
+    process.env.VITEST === 'true' ||
+    process.env.NODE_ENV === 'test';
 
   const addDir = (dir: string) => {
     const resolved = path.resolve(dir);
@@ -29,19 +34,19 @@ export function discoverCommandDirectories(projectRoot: string): string[] {
 
     if (visited.has(resolved)) return;
 
-    const isSrcDir = resolved.includes(path.join(path.sep, 'src', 'commands'));
+    // Detect if this is a source command directory
+    const srcPattern = path.join(path.sep, 'src', 'commands');
+    const distPattern = path.join(path.sep, 'dist');
+    const isSrcDir = resolved.endsWith(srcPattern) && !resolved.includes(distPattern);
 
     // Strict check: if we are adding a 'src' directory...
     if (isSrcDir) {
       // 1. Check if an equivalent 'dist' exists in the same package
       const distPath1 = resolved.replace(
-        path.join(path.sep, 'src', 'commands'),
+        srcPattern,
         path.join(path.sep, 'dist', 'src', 'commands'),
       );
-      const distPath2 = resolved.replace(
-        path.join(path.sep, 'src', 'commands'),
-        path.join(path.sep, 'dist', 'commands'),
-      );
+      const distPath2 = resolved.replace(srcPattern, path.join(path.sep, 'dist', 'commands'));
 
       if (fs.existsSync(distPath1) || fs.existsSync(distPath2)) {
         logger.debug(`Skipping src commands at ${resolved} because dist exists`);
