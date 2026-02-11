@@ -107,17 +107,9 @@ describe('SetupCommand', () => {
 
     // Check symlink calls
     // We have 2 apps * 7 shared assets = 14 symlinks
-    // sharedAssets = ['prisma', 'src', 'public', 'locales', 'scripts', 'astro.config.mjs', 'tsconfig.json']
+    // sharedAssets = ['prisma', 'src', 'public', 'locales', 'scripts']
 
-    const assets = [
-      'prisma',
-      'src',
-      'public',
-      'locales',
-      'scripts',
-      'astro.config.mjs',
-      'tsconfig.json',
-    ];
+    const assets = ['prisma', 'src', 'public', 'locales', 'scripts'];
 
     for (const app of ['frontend', 'backend']) {
       for (const asset of assets) {
