@@ -1,18 +1,45 @@
-import { BaseCommand, runCommand } from '@nexical/cli-core';
+import { BaseCommand } from '@nexical/cli-core';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import path from 'node:path';
 
 const execAsync = promisify(exec);
 
 interface DeployOptions {
   dryRun: boolean;
   railwayToken?: string;
+  railwayName?: string;
+  backendName: string;
+  frontendName: string;
   cloudflareToken?: string;
   cloudflareAccount?: string;
 }
 
 export default class DeployCommand extends BaseCommand {
-  static description = 'Deploy the application to Railway and Cloudflare.';
+  static description = `Deploy the application to Railway and Cloudflare.
+
+ENVIRONMENT SETUP & PREREQUISITES:
+1. Install Required CLIs:
+   - Railway CLI: npm i -g @railway/cli
+   - Wrangler (Cloudflare): npm i -g wrangler
+   - GitHub CLI: https://cli.github.com/
+
+2. Authentication:
+   - Railway: Run 'railway login'
+   - GitHub: Run 'gh auth login'
+   - Cloudflare: Obtain an API Token (with Pages edit permissions) and your Account ID from the dashboard.
+
+3. Configuration:
+   Run this command with --cloudflare-token and --cloudflare-account to automate the full setup.
+   Optional: Use --railway-token if you prefer not to use the interactive login.
+   Optional: Use --railway-name to specify a custom Railway project name.
+   Optional: Use --backend-name to specify the Railway service name (default: nexical-backend).
+   Optional: Use --frontend-name to specify the Cloudflare Pages project name (default: nexical-frontend).
+
+PROCESS:
+- Provisions a PostgreSQL database on Railway (if missing).
+- Creates a Cloudflare Pages project for the frontend.
+- Syncs all necessary deployment secrets and variables to GitHub for CI/CD automation.`;
 
   static args = {
     options: [
@@ -24,6 +51,20 @@ export default class DeployCommand extends BaseCommand {
       {
         name: '--railway-token <token>',
         description: 'Railway Project Token (optional if already logged in).',
+      },
+      {
+        name: '--railway-name <name>',
+        description: 'Railway Project Name (used during initialization).',
+      },
+      {
+        name: '--backend-name <name>',
+        description: 'Backend service name on Railway.',
+        default: 'nexical-backend',
+      },
+      {
+        name: '--frontend-name <name>',
+        description: 'Frontend project name on Cloudflare.',
+        default: 'nexical-frontend',
       },
       {
         name: '--cloudflare-token <token>',
@@ -50,8 +91,8 @@ export default class DeployCommand extends BaseCommand {
       // 2. Cloudflare Setup
       await this.setupCloudflare(options);
 
-      // 3. GitHub Secrets Setup
-      await this.setupGitHubSecrets(options);
+      // 3. GitHub Configuration (Secrets & Variables)
+      await this.setupGitHubConfig(options);
 
       this.success('Deployment setup complete! Your application is being deployed.');
     } catch (error: unknown) {
@@ -68,7 +109,10 @@ export default class DeployCommand extends BaseCommand {
     this.info('Configuring Railway...');
 
     if (options.dryRun) {
-      this.info('[Dry Run] Would run: railway init');
+      const initCmd = options.railwayName
+        ? `railway init --name ${options.railwayName}`
+        : 'railway init';
+      this.info(`[Dry Run] Would run: ${initCmd}`);
       this.info('[Dry Run] Would run: railway add --database postgres');
       return;
     }
@@ -79,24 +123,26 @@ export default class DeployCommand extends BaseCommand {
       // For now, let's assume we use 'railway link' if they passed a token or have it set.
 
       this.info('Ensuring Railway project is linked...');
-      // If they provided a token, we should probably set it in the environment for subsequent calls
-      if (options.railwayToken) {
-        process.env.RAILWAY_TOKEN = options.railwayToken;
-      }
+      // Note: We intentionally DO NOT set process.env.RAILWAY_TOKEN here.
+      // Management commands (init, status, add) require an interactive session (railway login).
+      // The provided --railway-token is reserved for GitHub Secrets setup (CI/CD).
 
-      // Check if we are in a railway project
+      const backendDir = path.join(process.cwd(), 'apps/backend');
+
       try {
-        await runCommand('railway status');
+        await execAsync('railway status', { cwd: backendDir });
       } catch {
-        this.info('No Railway project detected. Initializing...');
-        await runCommand('railway init');
+        const initCmd = options.railwayName
+          ? `railway init --name ${options.railwayName}`
+          : 'railway init';
+        this.info(`No Railway project detected in apps/backend. Initializing with: ${initCmd}`);
+        await execAsync(initCmd, { cwd: backendDir });
       }
 
-      this.info('Adding PostgreSQL service if missing...');
-      // railway add --database postgres is usually safe to run twice but we should check status
-      const { stdout: status } = await execAsync('railway status');
+      this.info(`Adding PostgreSQL service if missing for "${options.backendName}"...`);
+      const { stdout: status } = await execAsync('railway status', { cwd: backendDir });
       if (!status.includes('postgres')) {
-        await runCommand('railway add --database postgres');
+        await execAsync('railway add --database postgres', { cwd: backendDir });
       }
     } catch (e: unknown) {
       this.warn(
@@ -110,7 +156,7 @@ export default class DeployCommand extends BaseCommand {
     this.info('Configuring Cloudflare Pages...');
 
     if (options.dryRun) {
-      this.info('[Dry Run] Would run: wrangler pages project create nexical-frontend');
+      this.info(`[Dry Run] Would run: wrangler pages project create ${options.frontendName}`);
       return;
     }
 
@@ -122,8 +168,7 @@ export default class DeployCommand extends BaseCommand {
 
     try {
       // Use wrangler to create project if it doesn't exist
-      // We assume project name 'nexical-frontend' for now, should be configurable.
-      const projectName = 'nexical-frontend';
+      const projectName = options.frontendName;
       this.info(`Ensuring Cloudflare Pages project "${projectName}" exists...`);
 
       try {
@@ -143,42 +188,49 @@ export default class DeployCommand extends BaseCommand {
     }
   }
 
-  private async setupGitHubSecrets(options: DeployOptions) {
-    this.info('Configuring GitHub Secrets...');
+  private async setupGitHubConfig(options: DeployOptions) {
+    this.info('Configuring GitHub Secrets and Variables...');
 
     if (options.dryRun) {
       this.info('[Dry Run] Would run: gh secret set RAILWAY_TOKEN');
       this.info('[Dry Run] Would run: gh secret set CLOUDFLARE_API_TOKEN');
       this.info('[Dry Run] Would run: gh secret set CLOUDFLARE_ACCOUNT_ID');
+      this.info(
+        `[Dry Run] Would run: gh variable set RAILWAY_SERVICE_NAME --body "${options.backendName}"`,
+      );
+      this.info(
+        `[Dry Run] Would run: gh variable set CLOUDFLARE_PROJECT_NAME --body "${options.frontendName}"`,
+      );
       return;
     }
 
     try {
-      // We need the Railway Project Token.
-      // User might have provided it, or we try to get it from railway tokens?
-      // Railway CLI doesn't easily expose the project token via CLI easily without a lot of parsing.
-      // Usually users generate it in the UI.
-      // If they provided it via --railway-token, we use it.
-
       if (options.railwayToken) {
         this.info('Setting RAILWAY_TOKEN in GitHub...');
-        await runCommand(`gh secret set RAILWAY_TOKEN --body "${options.railwayToken}"`);
+        await execAsync(`gh secret set RAILWAY_TOKEN --body "${options.railwayToken}"`);
       }
 
       if (options.cloudflareToken) {
         this.info('Setting CLOUDFLARE_API_TOKEN in GitHub...');
-        await runCommand(`gh secret set CLOUDFLARE_API_TOKEN --body "${options.cloudflareToken}"`);
+        await execAsync(`gh secret set CLOUDFLARE_API_TOKEN --body "${options.cloudflareToken}"`);
       }
 
       if (options.cloudflareAccount) {
         this.info('Setting CLOUDFLARE_ACCOUNT_ID in GitHub...');
-        await runCommand(
+        await execAsync(
           `gh secret set CLOUDFLARE_ACCOUNT_ID --body "${options.cloudflareAccount}"`,
         );
       }
+
+      // Set variables
+      this.info(`Setting RAILWAY_SERVICE_NAME to "${options.backendName}" in GitHub...`);
+      await execAsync(`gh variable set RAILWAY_SERVICE_NAME --body "${options.backendName}"`);
+
+      this.info(`Setting CLOUDFLARE_PROJECT_NAME to "${options.frontendName}" in GitHub...`);
+      await execAsync(`gh variable set CLOUDFLARE_PROJECT_NAME --body "${options.frontendName}"`);
     } catch (e: unknown) {
       this.warn(
-        'GitHub Secrets setup failed. Ensure you have the GitHub CLI (gh) installed and are logged in.',
+        'GitHub configuration failed. Ensure you have the GitHub CLI (gh) installed and are logged in.',
       );
       throw e;
     }
