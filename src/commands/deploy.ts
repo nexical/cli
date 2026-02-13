@@ -1,238 +1,170 @@
-import { BaseCommand } from '@nexical/cli-core';
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import path from 'node:path';
-
-const execAsync = promisify(exec);
-
-interface DeployOptions {
-  dryRun: boolean;
-  railwayToken?: string;
-  railwayName?: string;
-  backendName: string;
-  frontendName: string;
-  cloudflareToken?: string;
-  cloudflareAccount?: string;
-}
+import dotenv from 'dotenv';
+import { BaseCommand } from '@nexical/cli-core';
+import { ConfigManager } from '../deploy/config-manager';
+import { ProviderRegistry } from '../deploy/registry';
+import { DeploymentContext } from '../deploy/types';
 
 export default class DeployCommand extends BaseCommand {
-  static description = `Deploy the application to Railway and Cloudflare.
+  static description = `Deploy the application based on nexical.yaml configuration.
 
-ENVIRONMENT SETUP & PREREQUISITES:
-1. Install Required CLIs:
-   - Railway CLI: npm i -g @railway/cli
-   - Wrangler (Cloudflare): npm i -g wrangler
-   - GitHub CLI: https://cli.github.com/
+This command orchestrates the deployment of your frontend and backend applications 
+by interacting with the providers specified in your configuration file.
 
-2. Authentication:
-   - Railway: Run 'railway login'
-   - GitHub: Run 'gh auth login'
-   - Cloudflare: Obtain an API Token (with Pages edit permissions) and your Account ID from the dashboard.
+CONFIGURATION:
+- Requires a 'nexical.yaml' file in the project root.
+- If the file or specific sections are missing, the CLI will prompt you to run an interactive setup 
+  and save the configuration for future uses.
+- Supports loading environment variables from a .env file in the project root.
 
-3. Configuration:
-   Run this command with --cloudflare-token and --cloudflare-account to automate the full setup.
-   Optional: Use --railway-token if you prefer not to use the interactive login.
-   Optional: Use --railway-name to specify a custom Railway project name.
-   Optional: Use --backend-name to specify the Railway service name (default: nexical-backend).
-   Optional: Use --frontend-name to specify the Cloudflare Pages project name (default: nexical-frontend).
+PROVIDERS:
+- Backend: Railway, etc.
+- Frontend: Cloudflare Pages, etc.
+- Repository: GitHub, GitLab, etc.
 
 PROCESS:
-- Provisions a PostgreSQL database on Railway (if missing).
-- Creates a Cloudflare Pages project for the frontend.
-- Syncs all necessary deployment secrets and variables to GitHub for CI/CD automation.`;
+1. Loads environment variables from '.env'.
+2. Loads configuration from 'nexical.yaml'.
+3. Provisions resources via the selected providers.
+4. Configures the repository (secrets/variables) for CI/CD.
+5. Generates CI/CD workflow files.`;
 
   static args = {
     options: [
       {
+        name: '--backend <provider>',
+        description: 'Override backend provider',
+      },
+      {
+        name: '--frontend <provider>',
+        description: 'Override frontend provider',
+      },
+      {
+        name: '--repo <provider>',
+        description: 'Override repositroy provider',
+      },
+      {
         name: '--dry-run',
-        description: 'Simulate the deployment process without making changes.',
+        description: 'Simulate the deployment process',
         default: false,
-      },
-      {
-        name: '--railway-token <token>',
-        description: 'Railway Project Token (optional if already logged in).',
-      },
-      {
-        name: '--railway-name <name>',
-        description: 'Railway Project Name (used during initialization).',
-      },
-      {
-        name: '--backend-name <name>',
-        description: 'Backend service name on Railway.',
-        default: 'nexical-backend',
-      },
-      {
-        name: '--frontend-name <name>',
-        description: 'Frontend project name on Cloudflare.',
-        default: 'nexical-frontend',
-      },
-      {
-        name: '--cloudflare-token <token>',
-        description: 'Cloudflare API Token.',
-      },
-      {
-        name: '--cloudflare-account <id>',
-        description: 'Cloudflare Account ID.',
       },
     ],
   };
 
-  async run(options: DeployOptions) {
-    this.info('Starting Nexical Deployment Automation...');
+  async run(options: Record<string, unknown>) {
+    this.info('Starting Nexical Deployment...');
 
-    if (options.dryRun) {
-      this.notice('DRY RUN MODE ENABLED');
+    // Load environment variables from .env
+    dotenv.config({ path: path.join(process.cwd(), '.env') });
+
+    const configManager = new ConfigManager(process.cwd());
+    const config = await configManager.load();
+    const registry = new ProviderRegistry();
+
+    // Register core and local providers
+    await registry.loadCoreProviders();
+    await registry.loadLocalProviders(process.cwd());
+
+    // Resolve providers (CLI flags > Config > Error)
+    const backendProviderName =
+      (options.backend as string | undefined) || config.deploy?.backend?.provider;
+    if (!backendProviderName) {
+      this.error(
+        "Backend provider not specified. Use --backend flag or configure 'deploy.backend.provider' in nexical.yaml.",
+      );
     }
 
+    const frontendProviderName =
+      (options.frontend as string | undefined) || config.deploy?.frontend?.provider;
+    if (!frontendProviderName) {
+      this.error(
+        "Frontend provider not specified. Use --frontend flag or configure 'deploy.frontend.provider' in nexical.yaml.",
+      );
+    }
+
+    const repoProviderName =
+      (options.repo as string | undefined) || config.deploy?.repository?.provider;
+    if (!repoProviderName) {
+      this.error(
+        "Repository provider not specified. Use --repo flag or configure 'deploy.repository.provider' in nexical.yaml.",
+      );
+    }
+
+    const backendProvider = registry.getDeploymentProvider(backendProviderName!);
+    const frontendProvider = registry.getDeploymentProvider(frontendProviderName!);
+    const repoProvider = registry.getRepositoryProvider(repoProviderName!);
+
+    if (!backendProvider) throw new Error(`Backend provider '${backendProviderName}' not found.`);
+    if (!frontendProvider)
+      throw new Error(`Frontend provider '${frontendProviderName}' not found.`);
+    if (!repoProvider) throw new Error(`Repository provider '${repoProviderName}' not found.`);
+
+    const context: DeploymentContext = {
+      cwd: process.cwd(),
+      config,
+      options,
+    };
+
+    // Provision
+    this.info(`Provisioning Backend with ${backendProvider.name}...`);
+    await backendProvider.provision(context);
+
+    this.info(`Provisioning Frontend with ${frontendProvider.name}...`);
+    await frontendProvider.provision(context);
+
+    // Configure Repo
+    this.info(`Configuring Repository with ${repoProvider.name}...`);
+
+    const secrets: Record<string, string> = {};
+
+    // Collect secrets from Backend Provider
+    this.info(`Resolving secrets from ${backendProvider.name}...`);
     try {
-      // 1. Railway Setup
-      await this.setupRailway(options);
-
-      // 2. Cloudflare Setup
-      await this.setupCloudflare(options);
-
-      // 3. GitHub Configuration (Secrets & Variables)
-      await this.setupGitHubConfig(options);
-
-      this.success('Deployment setup complete! Your application is being deployed.');
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        this.error(`Deployment failed: ${error.message}`);
-      } else {
-        this.error(`Deployment failed: ${String(error)}`);
-      }
-      process.exit(1);
-    }
-  }
-
-  private async setupRailway(options: DeployOptions) {
-    this.info('Configuring Railway...');
-
-    if (options.dryRun) {
-      const initCmd = options.railwayName
-        ? `railway init --name ${options.railwayName}`
-        : 'railway init';
-      this.info(`[Dry Run] Would run: ${initCmd}`);
-      this.info('[Dry Run] Would run: railway add --database postgres');
-      return;
-    }
-
-    try {
-      // Check if railway project exists or init
-      // Note: railway init might be interactive, so we might need to handle that or assume user has linked.
-      // For now, let's assume we use 'railway link' if they passed a token or have it set.
-
-      this.info('Ensuring Railway project is linked...');
-      // Note: We intentionally DO NOT set process.env.RAILWAY_TOKEN here.
-      // Management commands (init, status, add) require an interactive session (railway login).
-      // The provided --railway-token is reserved for GitHub Secrets setup (CI/CD).
-
-      const backendDir = path.join(process.cwd(), 'apps/backend');
-
-      try {
-        await execAsync('railway status', { cwd: backendDir });
-      } catch {
-        const initCmd = options.railwayName
-          ? `railway init --name ${options.railwayName}`
-          : 'railway init';
-        this.info(`No Railway project detected in apps/backend. Initializing with: ${initCmd}`);
-        await execAsync(initCmd, { cwd: backendDir });
-      }
-
-      this.info(`Adding PostgreSQL service if missing for "${options.backendName}"...`);
-      const { stdout: status } = await execAsync('railway status', { cwd: backendDir });
-      if (!status.includes('postgres')) {
-        await execAsync('railway add --database postgres', { cwd: backendDir });
-      }
+      const backendSecrets = await backendProvider.getSecrets(context);
+      Object.assign(secrets, backendSecrets);
     } catch (e: unknown) {
-      this.warn(
-        'Railway setup encountered an issue. Ensure you are logged in with `railway login`.',
-      );
-      throw e;
-    }
-  }
-
-  private async setupCloudflare(options: DeployOptions) {
-    this.info('Configuring Cloudflare Pages...');
-
-    if (options.dryRun) {
-      this.info(`[Dry Run] Would run: wrangler pages project create ${options.frontendName}`);
-      return;
+      const message = e instanceof Error ? e.message : String(e);
+      this.error(`Failed to resolve secrets for ${backendProvider.name}: ${message}`);
     }
 
-    if (!options.cloudflareToken || !options.cloudflareAccount) {
-      this.warn('Cloudflare credentials missing. Skipping automated Cloudflare setup.');
-      this.info('You can manually set up Cloudflare Pages and add the secrets to GitHub.');
-      return;
-    }
-
+    // Collect secrets from Frontend Provider
+    this.info(`Resolving secrets from ${frontendProvider.name}...`);
     try {
-      // Use wrangler to create project if it doesn't exist
-      const projectName = options.frontendName;
-      this.info(`Ensuring Cloudflare Pages project "${projectName}" exists...`);
-
-      try {
-        await execAsync(`wrangler pages project create ${projectName} --production-branch main`, {
-          env: {
-            ...process.env,
-            CLOUDFLARE_API_TOKEN: options.cloudflareToken,
-            CLOUDFLARE_ACCOUNT_ID: options.cloudflareAccount,
-          },
-        });
-      } catch {
-        this.info('Cloudflare project might already exist.');
-      }
+      const frontendSecrets = await frontendProvider.getSecrets(context);
+      Object.assign(secrets, frontendSecrets);
     } catch (e: unknown) {
-      this.warn('Cloudflare setup failed.');
-      throw e;
-    }
-  }
-
-  private async setupGitHubConfig(options: DeployOptions) {
-    this.info('Configuring GitHub Secrets and Variables...');
-
-    if (options.dryRun) {
-      this.info('[Dry Run] Would run: gh secret set RAILWAY_TOKEN');
-      this.info('[Dry Run] Would run: gh secret set CLOUDFLARE_API_TOKEN');
-      this.info('[Dry Run] Would run: gh secret set CLOUDFLARE_ACCOUNT_ID');
-      this.info(
-        `[Dry Run] Would run: gh variable set RAILWAY_SERVICE_NAME --body "${options.backendName}"`,
-      );
-      this.info(
-        `[Dry Run] Would run: gh variable set CLOUDFLARE_PROJECT_NAME --body "${options.frontendName}"`,
-      );
-      return;
+      const message = e instanceof Error ? e.message : String(e);
+      this.error(`Failed to resolve secrets for ${frontendProvider.name}: ${message}`);
     }
 
+    await repoProvider.configureSecrets(context, secrets);
+
+    const variables: Record<string, string> = {};
+
+    // Collect variables from Backend Provider
     try {
-      if (options.railwayToken) {
-        this.info('Setting RAILWAY_TOKEN in GitHub...');
-        await execAsync(`gh secret set RAILWAY_TOKEN --body "${options.railwayToken}"`);
-      }
-
-      if (options.cloudflareToken) {
-        this.info('Setting CLOUDFLARE_API_TOKEN in GitHub...');
-        await execAsync(`gh secret set CLOUDFLARE_API_TOKEN --body "${options.cloudflareToken}"`);
-      }
-
-      if (options.cloudflareAccount) {
-        this.info('Setting CLOUDFLARE_ACCOUNT_ID in GitHub...');
-        await execAsync(
-          `gh secret set CLOUDFLARE_ACCOUNT_ID --body "${options.cloudflareAccount}"`,
-        );
-      }
-
-      // Set variables
-      this.info(`Setting RAILWAY_SERVICE_NAME to "${options.backendName}" in GitHub...`);
-      await execAsync(`gh variable set RAILWAY_SERVICE_NAME --body "${options.backendName}"`);
-
-      this.info(`Setting CLOUDFLARE_PROJECT_NAME to "${options.frontendName}" in GitHub...`);
-      await execAsync(`gh variable set CLOUDFLARE_PROJECT_NAME --body "${options.frontendName}"`);
+      const backendVars = await backendProvider.getVariables(context);
+      Object.assign(variables, backendVars);
     } catch (e: unknown) {
-      this.warn(
-        'GitHub configuration failed. Ensure you have the GitHub CLI (gh) installed and are logged in.',
-      );
-      throw e;
+      const message = e instanceof Error ? e.message : String(e);
+      this.error(`Failed to resolve variables for ${backendProvider.name}: ${message}`);
     }
+
+    // Collect variables from Frontend Provider
+    try {
+      const frontendVars = await frontendProvider.getVariables(context);
+      Object.assign(variables, frontendVars);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.error(`Failed to resolve variables for ${frontendProvider.name}: ${message}`);
+    }
+
+    await repoProvider.configureVariables(context, variables);
+
+    // Generate Workflows
+    this.info('Generating CI/CD Workflows...');
+    await repoProvider.generateWorkflow(context, [backendProvider, frontendProvider]);
+
+    this.success('Deployment configuration complete!');
   }
 }
