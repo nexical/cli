@@ -44,6 +44,11 @@ PROCESS:
         description: 'Override repositroy provider',
       },
       {
+        name: '--env <environment>',
+        description: 'Deployment environment (e.g. production, staging)',
+        default: 'production',
+      },
+      {
         name: '--dry-run',
         description: 'Simulate the deployment process',
         default: false,

@@ -9,18 +9,21 @@ export class RailwayProvider implements DeploymentProvider {
 
   async provision(context: DeploymentContext): Promise<void> {
     const backendDir = path.join(context.cwd, 'apps/backend');
-    const railwayName = context.config.deploy?.backend?.projectName;
+    const env = (context.options.env as string) || 'production';
+    const baseProjectName = context.config.deploy?.backend?.projectName;
 
-    if (!railwayName) {
+    if (!baseProjectName) {
       throw new Error(
         "Railway project name not found in nexical.yaml. Please configure 'deploy.backend.projectName'.",
       );
     }
 
+    const railwayName = env === 'production' ? baseProjectName : `${baseProjectName}-${env}`;
+
     logger.info('Configuring Railway...');
 
     if (context.options.dryRun) {
-      logger.info('[Dry Run] Would check Railway status and init project.');
+      logger.info(`[Dry Run] Would check Railway status and init project "${railwayName}".`);
       return;
     }
 

@@ -7,13 +7,16 @@ export class CloudflareProvider implements DeploymentProvider {
   type = 'frontend' as const;
 
   async provision(context: DeploymentContext): Promise<void> {
-    const projectName = context.config.deploy?.frontend?.projectName;
+    const env = (context.options.env as string) || 'production';
+    const baseProjectName = context.config.deploy?.frontend?.projectName;
 
-    if (!projectName) {
+    if (!baseProjectName) {
       throw new Error(
         "Cloudflare project name not found in nexical.yaml. Please configure 'deploy.frontend.projectName'.",
       );
     }
+
+    const projectName = env === 'production' ? baseProjectName : `${baseProjectName}-${env}`;
 
     const options = context.config.deploy?.frontend?.options || {};
 
@@ -42,7 +45,9 @@ export class CloudflareProvider implements DeploymentProvider {
     logger.info('Configuring Cloudflare Pages...');
 
     if (context.options.dryRun) {
-      logger.info('[Dry Run] Would check Cloudflare Pages project and create if missing.');
+      logger.info(
+        `[Dry Run] Would check Cloudflare Pages project "${projectName}" and create if missing.`,
+      );
       return;
     }
 
@@ -111,13 +116,16 @@ export class CloudflareProvider implements DeploymentProvider {
   }
 
   async getVariables(context: DeploymentContext): Promise<Record<string, string>> {
-    const projectName = context.config.deploy?.frontend?.projectName;
+    const env = (context.options.env as string) || 'production';
+    const baseProjectName = context.config.deploy?.frontend?.projectName;
 
-    if (!projectName) {
+    if (!baseProjectName) {
       throw new Error(
         "Cloudflare project name not found in nexical.yaml. Please configure 'deploy.frontend.projectName'.",
       );
     }
+
+    const projectName = env === 'production' ? baseProjectName : `${baseProjectName}-${env}`;
     return {
       CLOUDFLARE_PROJECT_NAME: projectName,
     };
