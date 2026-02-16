@@ -260,7 +260,7 @@ describe('RunCommand', () => {
   it('should fall back to default behavior if script not found in module', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(fs.pathExists).mockImplementation(async (p: any) => {
-      return p.includes('src/modules/mymod') || p.includes('package.json');
+      return p.includes('apps/backend/modules/mymod') || p.includes('package.json');
     });
     vi.mocked(fs.readJson).mockResolvedValue({
       name: 'mymod',
@@ -299,6 +299,21 @@ describe('RunCommand', () => {
 
     expect(command.error).toHaveBeenCalledWith(
       expect.stringContaining('does not exist in Nexical core'),
+    );
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('does not exist in Nexical core'),
+    );
+  });
+
+  it('should handle non-Error exception in package.json read', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(fs.pathExists).mockImplementation(async (p: any) => p.includes('package.json'));
+    vi.mocked(fs.readJson).mockRejectedValue('String error');
+
+    await command.run({ script: 'test', args: [] });
+
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to read package.json at /mock/root: String error'),
     );
   });
 });

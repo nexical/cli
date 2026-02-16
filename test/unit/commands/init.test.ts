@@ -184,5 +184,20 @@ describe('InitCommand', () => {
     expect(command.error).toHaveBeenCalledWith(
       expect.stringContaining('Failed to initialize project'),
     );
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to initialize project'),
+    );
+  });
+
+  it('should handle non-Error objects in catch', async () => {
+    vi.mocked(git.clone).mockRejectedValueOnce('String error');
+
+    await expect(command.run({ directory: 'fail-project', repo: 'foo' })).rejects.toThrow(
+      'Process.exit(1)',
+    );
+
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to initialize project: String error'),
+    );
   });
 });

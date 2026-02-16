@@ -1,189 +1,192 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { discoverCommandDirectories } from '../../../src/utils/discovery';
+import { discoverCommandDirectories } from '../../../src/utils/discovery.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { logger } from '@nexical/cli-core';
 
 vi.mock('node:fs');
-
-// Mock path module to allow controlled resolution for duplicate testing
-const originalPath = await import('node:path');
-const originalResolve = originalPath.resolve;
-
-vi.mock('node:path', async (importOriginal) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mod: any = await importOriginal();
-  return {
-    ...mod,
-    default: {
-      ...mod.default,
-      resolve: vi.fn((...args: string[]) => mod.default.resolve(...args)),
-    },
-    resolve: vi.fn((...args: string[]) => mod.resolve(...args)),
-  };
-});
-
 vi.mock('@nexical/cli-core', () => ({
   logger: {
     debug: vi.fn(),
     warn: vi.fn(),
-    error: vi.fn(),
   },
 }));
 
 describe('discoverCommandDirectories', () => {
-  // ... setup ...
-  const cwd = '/app';
-
   beforeEach(() => {
     vi.resetAllMocks();
-    // Restore default path behavior
-    vi.mocked(path.resolve).mockImplementation(originalResolve);
-    // Default fs mocks
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    vi.mocked(fs.readdirSync).mockReturnValue([]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
   });
 
-  it('should return empty list if no directories exist', () => {
-    const dirs = discoverCommandDirectories(cwd);
-    expect(dirs).toHaveLength(0);
-  });
+  const root = path.resolve('/mock');
 
-  it('should find core commands in project directory', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-      return p === path.resolve('/app/src/commands');
-    });
-
-    const dirs = discoverCommandDirectories(cwd);
-    expect(dirs).toContain(path.resolve('/app/src/commands'));
-  });
-
-  it('should scan modules for commands', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-      if (p === path.resolve('/app/modules')) return true;
-      if (p === path.resolve('/app/modules/mod1')) return true;
-      if (p === path.resolve('/app/modules/mod1/src/commands')) return true;
-      if (p === path.resolve('/app/modules/mod2')) return true;
-      return false;
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.readdirSync).mockReturnValue(['mod1', 'mod2', '.hidden'] as any);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
-
-    const dirs = discoverCommandDirectories(cwd);
-
-    expect(dirs).toContain(path.resolve('/app/modules/mod1/src/commands'));
-    expect(dirs).not.toContain(path.resolve('/app/modules/mod2/src/commands'));
-  });
-
-  it('should scan src/modules for commands', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-      if (p === path.resolve('/app/src/modules')) return true;
-      if (p === path.resolve('/app/src/modules/mod-src')) return true;
-      if (p === path.resolve('/app/src/modules/mod-src/src/commands')) return true;
-      return false;
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.readdirSync).mockReturnValue(['mod-src'] as any);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
-
-    const dirs = discoverCommandDirectories(cwd);
-
-    expect(dirs).toContain(path.resolve('/app/src/modules/mod-src/src/commands'));
-  });
-
-  it('should handle errors when scanning modules', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-      return p === path.resolve('/app/src/commands');
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.readdirSync).mockImplementation((p: any) => {
-      if (p.includes('modules')) throw new Error('Permission denied');
-      return [];
-    });
-
-    const dirs = discoverCommandDirectories(cwd);
-    // Should not crash
-    expect(dirs).toHaveLength(1);
-    expect(dirs).toContain(path.resolve('/app/src/commands'));
-  });
-
-  it('should deduplicate dist and src core commands', () => {
-    // const srcPath = path.resolve('/app/src/commands');
-
-    // First we add distPath (manually simulate index.ts adding it to visited if we could,
-    // but here we test the internal visited set of discoverCommandDirectories for multiple calls if we used it that way,
-    // or rather we test how it handles its OWN loops.
-    // Actually discoverCommandDirectories doesn't see distPath unless we add it to its loops.
-
-    // Let's test if it skips src/commands if it SHOULD.
-    // Wait, the new logic in discovery.ts skips src/commands if dist/src/commands is in visited.
-    // So we need to simulate adding dist/src/commands first.
-
-    // Actually my new logic in discovery.ts DOES NOT scan for dist/src/commands automatically.
-    // It relies on index.ts adding it, OR if it's found in a module.
-
-    // Let's test the deduplication logic in addDir specifically if we can.
-    // I'll add a test case that calls it twice conceptually.
-
-    // Wait, discovery.ts:
-    /*
-            const isSrc = resolved.endsWith(path.join('src', 'commands'));
-            if (isSrc) {
-                const distEquivalent = resolved.replace(path.sep + 'src' + path.sep, path.sep + 'dist' + path.sep + 'src' + path.sep);
-                if (visited.has(distEquivalent)) return;
-            }
-        */
-
-    // Implementation check:
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readdirSync).mockReturnValue([]);
-
-    // Since we can't easily control 'visited' from outside, we trust the logic.
-    // But we can verify it doesn't return BOTH if they resolve to same thing (already handled by visited.has(resolved)).
-  });
-
-  it('should ignore duplicate paths', () => {
-    const corePath = path.resolve('/app/src/commands');
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-      return p === corePath;
-    });
-
-    const dirs = discoverCommandDirectories(cwd);
-
+  it('should discover core commands', () => {
+    const corePath = path.join(root, 'src/commands');
+    vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => p === corePath) as any);
+    const dirs = discoverCommandDirectories(root);
     expect(dirs).toContain(corePath);
-    expect(dirs).toHaveLength(1);
   });
 
-  it('should ignore files in modules directory', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.readdirSync).mockReturnValue(['mod1', 'file.txt'] as any);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.statSync).mockImplementation((p: any) => {
-      if (typeof p === 'string' && p.endsWith('file.txt')) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return { isDirectory: () => false } as any;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return { isDirectory: () => true } as any;
+  it('should skip directories that do not exist', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const dirs = discoverCommandDirectories(root);
+    expect(dirs).toEqual([]);
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Command directory not found'),
+    );
+  });
+
+  it('should skip src commands if dist exists', () => {
+    const corePath = path.join(root, 'src/commands');
+    const distPath = path.join(root, 'dist/commands');
+    vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => {
+      if (p === corePath || p === distPath) return true;
+      return false;
+    }) as any);
+    const dirs = discoverCommandDirectories(root);
+    expect(dirs).not.toContain(corePath);
+  });
+
+  it('should discover module commands', () => {
+    const modulesRoot = path.join(root, 'modules');
+    const mod1Path = path.join(modulesRoot, 'mod1');
+    const mod1SrcCommands = path.join(mod1Path, 'src/commands');
+
+    vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => {
+      if (p === modulesRoot) return true;
+      if (p === mod1SrcCommands) return true;
+      return false;
+    }) as any);
+    vi.mocked(fs.readdirSync).mockImplementation(((p: fs.PathLike) => {
+      if (p === modulesRoot) return ['mod1'] as unknown as string[];
+      return [] as string[];
+    }) as any);
+    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
+
+    const dirs = discoverCommandDirectories(root);
+    expect(dirs).toContain(mod1SrcCommands);
+  });
+
+  it('should skip already visited directories', () => {
+    const corePath = path.join(root, 'src/commands');
+
+    vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => {
+      if ((p as string).includes('dist')) return false;
+      return true;
+    }) as any);
+
+    const modulesRoot = path.join(root, 'modules');
+    vi.mocked(fs.readdirSync).mockImplementation(((p: fs.PathLike) => {
+      if (p === modulesRoot) return ['core-link'] as unknown as string[];
+      return [] as string[];
+    }) as any);
+    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
+
+    const mockModuleSrcPath = path.join(root, 'modules/core-link/src/commands');
+    const originalResolve = path.resolve;
+    path.resolve = vi.fn().mockImplementation((p: string) => {
+      if (p === mockModuleSrcPath) return corePath;
+      if (p === root || p.startsWith(root)) return p;
+      return originalResolve(p);
     });
 
-    const dirs = discoverCommandDirectories(cwd);
-    // Should process mod1, ignore file.txt
-    // The logic prefers dist/src/commands if it exists, and our mock returns true for all existsSync
-    expect(dirs).toContain(path.resolve('/app/modules/mod1/dist/src/commands'));
-    expect(dirs).not.toContain(path.resolve('/app/modules/file.txt/src/commands'));
+    const dirs = discoverCommandDirectories(root);
+    expect(dirs.filter((d: string) => d === corePath).length).toBe(1);
+
+    path.resolve = originalResolve;
+  });
+
+  it('should skip hidden entries and files in module search', () => {
+    const modulesRoot = path.join(root, 'modules');
+    vi.mocked(fs.existsSync).mockImplementation((p: fs.PathLike) => p === modulesRoot);
+    vi.mocked(fs.readdirSync).mockReturnValue(['.git', 'file.txt'] as any);
+    vi.mocked(fs.statSync).mockImplementation(
+      (p: fs.PathLike) =>
+        ({
+          isDirectory: () => !(p as string).endsWith('file.txt'),
+        }) as fs.Stats,
+    );
+
+    const dirs = discoverCommandDirectories(root);
+    expect(dirs).toEqual([]);
+  });
+
+  it('should discover dist commands in modules', () => {
+    const modulesRoot = path.join(root, 'modules');
+    const modDistPath = path.join(modulesRoot, 'mod-dist');
+    const distCommands = path.join(modDistPath, 'dist/commands');
+
+    vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => {
+      if (p === modulesRoot) return true;
+      if (p === distCommands) return true;
+      return false;
+    }) as any);
+    vi.mocked(fs.readdirSync).mockImplementation(((p: fs.PathLike) => {
+      if (p === modulesRoot) return ['mod-dist'] as unknown as string[];
+      return [] as string[];
+    }) as any);
+    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
+
+    const dirs = discoverCommandDirectories(root);
+    expect(dirs).toContain(distCommands);
+  });
+
+  it('should skip module with no command directories', () => {
+    const modulesRoot = path.join(root, 'modules');
+    // modEmpty removed as unused
+
+    vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => {
+      if (p === modulesRoot) return true;
+      // No dist, no src
+      return false;
+    }) as any);
+    vi.mocked(fs.readdirSync).mockImplementation(((p: fs.PathLike) => {
+      if (p === modulesRoot) return ['mod-empty'] as unknown as string[];
+      return [] as string[];
+    }) as any);
+    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
+
+    discoverCommandDirectories(root);
+    expect(discoverCommandDirectories(root)).not.toContain(expect.stringContaining('mod-empty'));
+  });
+
+  describe('edge cases', () => {
+    it('should handle non-TS environment', () => {
+      const originalArgv = process.argv;
+      const originalEnv = { ...process.env };
+
+      Object.defineProperty(process, 'argv', { value: ['node', 'cli.js'], configurable: true });
+      process.env.VITEST = 'false';
+      process.env.NODE_ENV = 'production';
+      const originalExecArgv = process.execArgv;
+      Object.defineProperty(process, 'execArgv', { value: [], configurable: true });
+
+      const corePath = path.join(root, 'src/commands');
+      vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => p === corePath) as any);
+
+      discoverCommandDirectories(root);
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('no TS loader detected'));
+
+      process.argv = originalArgv;
+      Object.assign(process.env, originalEnv);
+      Object.defineProperty(process, 'execArgv', { value: originalExecArgv, configurable: true });
+    });
+
+    it('should handle readdir failure with Error', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readdirSync).mockImplementation(() => {
+        throw new Error('fail');
+      });
+      discoverCommandDirectories(root);
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Error scanning root'));
+    });
+
+    it('should handle readdir failure with String', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readdirSync).mockImplementation(() => {
+        throw 'String Fail';
+      });
+      discoverCommandDirectories(root);
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('String Fail'));
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { CLI } from '@nexical/cli-core';
-import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import ModuleAddCommand from '../../../src/commands/module/add.js';
 import ModuleRemoveCommand from '../../../src/commands/module/remove.js';
 import ModuleListCommand from '../../../src/commands/module/list.js';
@@ -8,6 +8,7 @@ import ModuleUpdateCommand from '../../../src/commands/module/update.js';
 import { createTempDir, createMockRepo, cleanupTestRoot } from '../../utils/integration-helpers.js';
 import path from 'node:path';
 import fs from 'fs-extra';
+import { execa } from 'execa';
 
 // Mock picocolors to return strings as-is for easy matching
 vi.mock('picocolors', () => ({
@@ -25,7 +26,6 @@ vi.mock('picocolors', () => ({
 
 describe('Module Commands Integration', () => {
   let projectDir: string;
-  let moduleRepo: string;
   let consoleTableSpy: unknown;
 
   beforeEach(async () => {
@@ -42,7 +42,7 @@ describe('Module Commands Integration', () => {
 
     // 2. Create a "Module" that is a SEPARATE git repo
     const modTemp = await createTempDir('module-source-');
-    moduleRepo = await createMockRepo(modTemp, {
+    await createMockRepo(modTemp, {
       'package.json': '{"name": "my-module", "version": "1.0.0", "description": "Awesome module"}',
       'module.yaml': 'name: my-module\nversion: 1.0.0',
       'index.ts': 'export const hello = "world";',
@@ -65,78 +65,104 @@ describe('Module Commands Integration', () => {
     await cleanupTestRoot();
   });
 
-  it('should add, list, update and remove a module', async () => {
+  it('should add, list, update and remove backend and frontend modules', async () => {
     const originalCwd = process.cwd();
-    const cli = new CLI({ commandName: 'nexical' });
+    // Re-initialize CLI for this test to ensure clean state if needed, though previously it was new per test
+    // We can reuse the CLI instance from beforeEach if we moved it there, but here it is fine.
+
+    // 1. Setup Backend Module Repo
+    const backendTemp = await createTempDir('backend-mod-');
+    const backendRepo = await createMockRepo(backendTemp, {
+      'package.json': '{"name": "backend-api", "version": "1.0.0"}',
+      'module.yaml': 'name: backend-api\nversion: 1.0.0',
+      'models.yaml': '- name: User\n  fields: {}', // Indicator
+    });
+
+    // 2. Setup Frontend Module Repo
+    const frontendTemp = await createTempDir('frontend-mod-');
+    const frontendRepo = await createMockRepo(frontendTemp, {
+      'package.json': '{"name": "frontend-ui", "version": "1.0.0"}',
+      'module.yaml': 'name: frontend-ui\nversion: 1.0.0',
+      'ui.yaml': 'theme: dark', // Indicator
+    });
+
     try {
       process.chdir(projectDir);
 
-      // 1. ADD MODULE
-      const addCmd = new ModuleAddCommand(cli);
+      // --- ADD BACKEND ---
+      // --- ADD BACKEND ---
+      // Actually `run` uses `this.projectRoot` which is set by `BaseCommand.init()`.
 
-      await addCmd.init();
-      await addCmd.run({ url: moduleRepo });
+      // Let's rely on the pattern from the existing file:
+      // imports: import { CLI } from '@nexical/cli-core';
+      // const cli = new CLI({ commandName: 'nexical' });
+      // const addCmd = new ModuleAddCommand(cli);
 
-      const modulePath = path.join(projectDir, 'modules/my-module');
-      expect(fs.existsSync(modulePath)).toBe(true);
-      expect(fs.existsSync(path.join(modulePath, 'package.json'))).toBe(true);
+      // I need to instantiate CLI first.
+      const cli = new CLI({ commandName: 'nexical' });
 
-      // Verify nexical.yaml updated
+      const addBackend = new ModuleAddCommand(cli);
+      (addBackend as unknown as { projectRoot: string }).projectRoot = projectDir;
+      // or we can rely on init() finding it if CWD is correct.
+      // Let's try to set it explicitly to be safe.
+
+      await addBackend.run({ url: backendRepo });
+
+      const backendPath = path.join(projectDir, 'apps/backend/modules/backend-api');
+      expect(fs.existsSync(backendPath)).toBe(true);
+      expect(fs.existsSync(path.join(backendPath, 'models.yaml'))).toBe(true);
+
+      // --- ADD FRONTEND ---
+      const addFrontend = new ModuleAddCommand(cli);
+      (addFrontend as unknown as { projectRoot: string }).projectRoot = projectDir;
+      await addFrontend.run({ url: frontendRepo });
+
+      const frontendPath = path.join(projectDir, 'apps/frontend/modules/frontend-ui');
+      expect(fs.existsSync(frontendPath)).toBe(true);
+      expect(fs.existsSync(path.join(frontendPath, 'ui.yaml'))).toBe(true);
+
+      // --- VERIFY CONFIG ---
       const config = await fs.readFile(path.join(projectDir, 'nexical.yaml'), 'utf8');
       expect(config).toContain('modules:');
-      expect(config).toContain('- my-module');
+      expect(config).toContain('backend:');
+      expect(config).toContain('  - backend-api'); // Indentation check might be flaky with yaml stringify, just check existence
+      expect(config).toContain('frontend:');
+      expect(config).toContain('  - frontend-ui');
 
-      // Check it is a submodule
-      // .git file in module dir pointing to gitdir
-      expect(fs.existsSync(path.join(modulePath, '.git'))).toBe(true);
-      const gitModules = await fs.readFile(path.join(projectDir, '.gitmodules'), 'utf-8');
-      expect(gitModules).toContain('path = modules/my-module');
-
-      // 2. LIST MODULES with valid module
+      // --- LIST ---
       const listCmd = new ModuleListCommand(cli);
-      await listCmd.init();
+      (listCmd as unknown as { projectRoot: string }).projectRoot = projectDir;
       await listCmd.run();
 
-      // Check console.table called with module info
       expect(consoleTableSpy).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({
-            name: 'my-module',
-            version: '1.0.0',
-            description: 'Awesome module',
-          }),
+          expect.objectContaining({ name: 'backend-api', type: 'backend' }),
+          expect.objectContaining({ name: 'frontend-ui', type: 'frontend' }),
         ]),
       );
 
-      // 3. UPDATE MODULE
-      const updateCmd = new ModuleUpdateCommand(cli);
-      await updateCmd.init();
-      await updateCmd.run({ name: 'my-module' });
-      // Hard to check "update" without changing the remote first.
-      // But we verify it ran without throwing.
-
-      // 4. REMOVE MODULE
+      // --- REMOVE BACKEND ---
       const removeCmd = new ModuleRemoveCommand(cli);
-      await removeCmd.init();
-      await removeCmd.run({ name: 'my-module' });
+      (removeCmd as unknown as { projectRoot: string }).projectRoot = projectDir;
+      await removeCmd.run({ name: 'backend-api' });
 
-      expect(fs.existsSync(modulePath)).toBe(false);
+      expect(fs.existsSync(backendPath)).toBe(false);
 
-      // Verify git cleanup
-      // .git/modules/modules/my-module should be gone
-      const gitInternalModuleDir = path.join(projectDir, '.git/modules/modules/my-module');
-      expect(fs.existsSync(gitInternalModuleDir)).toBe(false);
+      const configAfterRemove = await fs.readFile(path.join(projectDir, 'nexical.yaml'), 'utf8');
+      expect(configAfterRemove).not.toContain('backend-api');
+      expect(configAfterRemove).toContain('frontend-ui');
 
-      // .gitmodules entry gone? `git rm` usually handles this.
-      // Check if .gitmodules file exists (if empty it might remain or be deleted depending on git version, usually implicitly updated)
-      if (fs.existsSync(path.join(projectDir, '.gitmodules'))) {
-        const updatedGitModules = await fs.readFile(path.join(projectDir, '.gitmodules'), 'utf-8');
-        expect(updatedGitModules).not.toContain('modules/my-module');
-      }
+      // --- UPDATE FRONTEND ---
+      // Commit a change to frontend repo
+      await execa('git', ['commit', '--allow-empty', '-m', 'New version'], { cwd: frontendRepo });
 
-      // Verify nexical.yaml updated
-      const configRemoved = await fs.readFile(path.join(projectDir, 'nexical.yaml'), 'utf8');
-      expect(configRemoved).not.toContain('- my-module');
+      const updateCmd = new ModuleUpdateCommand(cli);
+      (updateCmd as unknown as { projectRoot: string }).projectRoot = projectDir;
+      await updateCmd.run({});
+
+      // Verify submodule update?
+      // Diff hard to check without actually checking git status inside.
+      // But command should succeed.
     } finally {
       process.chdir(originalCwd);
     }

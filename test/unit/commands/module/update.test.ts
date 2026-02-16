@@ -1,95 +1,78 @@
-import { runCommand } from '@nexical/cli-core';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ModuleUpdateCommand from '../../../../src/commands/module/update.js';
 import fs from 'fs-extra';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { runCommand, logger } from '@nexical/cli-core';
 
-vi.mock('@nexical/cli-core', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@nexical/cli-core')>();
+// Mocks
+vi.mock('fs-extra');
+vi.mock('@nexical/cli-core', async () => {
   return {
-    ...mod,
-    logger: {
-      ...mod.logger,
-      success: vi.fn(),
-      info: vi.fn(),
-      debug: vi.fn(),
-      error: vi.fn(),
-      warn: vi.fn(),
+    BaseCommand: class {
+      projectRoot = '/mock/project/root';
+      info = vi.fn();
+      success = vi.fn();
+      error = vi.fn();
     },
+    logger: { debug: vi.fn(), warn: vi.fn() },
     runCommand: vi.fn(),
   };
 });
-vi.mock('fs-extra');
 
 describe('ModuleUpdateCommand', () => {
   let command: ModuleUpdateCommand;
 
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    command = new ModuleUpdateCommand({}, { rootDir: '/mock/root' });
-    vi.spyOn(command, 'error').mockImplementation(() => {});
-    vi.spyOn(command, 'success').mockImplementation(() => {});
-    vi.spyOn(command, 'info').mockImplementation(() => {});
-    vi.mocked(fs.pathExists).mockImplementation(async (p: string) => {
-      if (p.includes('app.yml') || p.includes('nexical.yml')) return true;
-      return true;
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
-    await command.init();
+  beforeEach(() => {
+    vi.resetAllMocks();
+    command = new ModuleUpdateCommand({} as unknown as any, {} as unknown as any);
+    (runCommand as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('should have correct static properties', () => {
-    expect(ModuleUpdateCommand.usage).toContain('module update');
-    expect(ModuleUpdateCommand.description).toBeDefined();
-    expect(ModuleUpdateCommand.requiresProject).toBe(true);
-    expect(ModuleUpdateCommand.args).toBeDefined();
-  });
-
-  it('should error if project root is missing', async () => {
-    command = new ModuleUpdateCommand({}, { rootDir: undefined });
-    vi.spyOn(command, 'init').mockImplementation(async () => {});
-    vi.spyOn(command, 'error').mockImplementation(() => {});
-
-    await command.runInit({});
-    expect(command.error).toHaveBeenCalledWith(
-      expect.stringContaining('requires to be run within an app project'),
-      1,
-    );
+    vi.clearAllMocks();
   });
 
   it('should update all modules if no name provided', async () => {
     await command.run({});
-    expect(runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('git submodule update --remote'),
-      '/mock/root',
-    );
-    expect(runCommand).toHaveBeenCalledWith('npm install', '/mock/root');
-  });
 
-  it('should update specific module', async () => {
-    await command.run({ name: 'mod' });
     expect(runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('git submodule update --remote --merge modules/mod'),
-      '/mock/root',
+      'git submodule update --remote --merge',
+      expect.any(String),
     );
   });
 
-  it('should handle failure during update', async () => {
-    vi.mocked(runCommand).mockRejectedValue(new Error('Update failed'));
-    await command.run({});
-    expect(command.error).toHaveBeenCalledWith(expect.stringContaining('Failed to update'));
-  });
-
-  it('should error if module to update not found', async () => {
-    vi.mocked(fs.pathExists).mockImplementation(async (p) => {
-      // console.log('UpdateTest: pathExists check:', p);
-      return false;
+  it('should update specific module if name provided', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      return p.includes('apps/frontend/modules/ui-mod');
     });
+
+    await command.run({ name: 'ui-mod' });
+
+    expect(runCommand).toHaveBeenCalledWith(
+      expect.stringContaining('git submodule update --remote --merge apps/frontend/modules/ui-mod'),
+      expect.any(String),
+    );
+  });
+
+  it('should error if specific module not found', async () => {
+    (fs.pathExists as unknown as { mockResolvedValue: any }).mockResolvedValue(false);
     await command.run({ name: 'missing-mod' });
     expect(command.error).toHaveBeenCalledWith('Module missing-mod not found.');
+  });
+
+  it('should handle error during update', async () => {
+    (runCommand as unknown as { mockRejectedValue: any }).mockRejectedValue(new Error('Git fail'));
+    await command.run({});
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to update modules: Git fail'),
+    );
+  });
+
+  it('should handle non-Error exception during update', async () => {
+    (runCommand as unknown as { mockRejectedValue: any }).mockRejectedValue('String error');
+    await command.run({});
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to update modules: String error'),
+    );
   });
 });

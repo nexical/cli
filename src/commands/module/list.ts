@@ -1,7 +1,14 @@
-import { BaseCommand, logger } from '@nexical/cli-core';
+import { BaseCommand } from '@nexical/cli-core';
 import fs from 'fs-extra';
 import path from 'path';
 import YAML from 'yaml';
+
+interface ModuleInfo {
+  name: string;
+  version: string;
+  description: string;
+  type: 'backend' | 'frontend' | 'legacy';
+}
 
 export default class ModuleListCommand extends BaseCommand {
   static usage = 'module list';
@@ -10,71 +17,87 @@ export default class ModuleListCommand extends BaseCommand {
 
   async run() {
     const projectRoot = this.projectRoot as string;
-    const modulesDir = path.resolve(projectRoot, 'modules');
-    logger.debug(`Scanning for modules in: ${modulesDir}`);
 
-    if (!(await fs.pathExists(modulesDir))) {
-      this.info('No modules installed (modules directory missing).');
-      return;
-    }
+    // Define locations to scan
+    const builtInLocations = [
+      { type: 'backend', path: path.join(projectRoot, 'apps/backend/modules') },
+      { type: 'frontend', path: path.join(projectRoot, 'apps/frontend/modules') },
+      // Check legacy `modules` folder just in case?
+      { type: 'legacy', path: path.join(projectRoot, 'modules') },
+    ];
 
-    try {
-      const modules = await fs.readdir(modulesDir);
-      const validModules: { name: string; version: string; description: string }[] = [];
+    const allModules: ModuleInfo[] = [];
 
-      for (const moduleName of modules) {
-        const modulePath = path.join(modulesDir, moduleName);
-        if ((await fs.stat(modulePath)).isDirectory()) {
-          let version = 'unknown';
-          let description = '';
+    for (const loc of builtInLocations) {
+      if (await fs.pathExists(loc.path)) {
+        const modules = await fs.readdir(loc.path);
 
-          const pkgJsonPath = path.join(modulePath, 'package.json');
-          const moduleYamlPath = path.join(modulePath, 'module.yaml');
-          const moduleYmlPath = path.join(modulePath, 'module.yml');
-
-          let pkg: Record<string, unknown> = {};
-          let modConfig: Record<string, unknown> = {};
-
-          if (await fs.pathExists(pkgJsonPath)) {
-            try {
-              pkg = await fs.readJson(pkgJsonPath);
-            } catch {
-              /* ignore */
-            }
+        for (const moduleName of modules) {
+          const modulePath = path.join(loc.path, moduleName);
+          if ((await fs.stat(modulePath)).isDirectory()) {
+            const info = await this.getModuleInfo(
+              modulePath,
+              moduleName,
+              loc.type as 'backend' | 'frontend' | 'legacy',
+            );
+            allModules.push(info);
           }
-
-          if ((await fs.pathExists(moduleYamlPath)) || (await fs.pathExists(moduleYmlPath))) {
-            try {
-              const configPath = (await fs.pathExists(moduleYamlPath))
-                ? moduleYamlPath
-                : moduleYmlPath;
-              const content = await fs.readFile(configPath, 'utf8');
-              modConfig = YAML.parse(content) || {};
-            } catch {
-              /* ignore */
-            }
-          }
-
-          version = (pkg.version as string) || (modConfig.version as string) || 'unknown';
-          description = (pkg.description as string) || (modConfig.description as string) || '';
-          // Optionally use display name from module.yaml if present, but strictly list is usually dir name.
-          // Let's stick to dir name for "name" column, but description from module.yaml is good.
-          validModules.push({ name: moduleName, version, description });
         }
       }
+    }
 
-      if (validModules.length === 0) {
-        this.info('No modules installed.');
-      } else {
-        // eslint-disable-next-line no-console
-        console.table(validModules);
-      }
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        this.error(`Failed to list modules: ${error.message}`);
-      } else {
-        this.error(`Failed to list modules: ${String(error)}`);
+    if (allModules.length === 0) {
+      this.info('No modules installed.');
+    } else {
+      // Sort by type then name
+      allModules.sort((a, b) => {
+        if (a.type !== b.type) return a.type.localeCompare(b.type);
+        return a.name.localeCompare(b.name);
+      });
+      // eslint-disable-next-line no-console
+      console.table(allModules);
+    }
+  }
+
+  private async getModuleInfo(
+    modulePath: string,
+    dirName: string,
+    type: 'backend' | 'frontend' | 'legacy',
+  ): Promise<ModuleInfo> {
+    let version = 'unknown';
+    let description = '';
+
+    const pkgJsonPath = path.join(modulePath, 'package.json');
+    const moduleYamlPath = path.join(modulePath, 'module.yaml');
+    const moduleYmlPath = path.join(modulePath, 'module.yml');
+
+    let pkg: Record<string, unknown> = {};
+    let modConfig: Record<string, unknown> = {};
+
+    if (await fs.pathExists(pkgJsonPath)) {
+      try {
+        pkg = (await fs.readJson(pkgJsonPath)) || {};
+      } catch {
+        /* ignore */
       }
     }
+
+    if ((await fs.pathExists(moduleYamlPath)) || (await fs.pathExists(moduleYmlPath))) {
+      try {
+        const configPath = (await fs.pathExists(moduleYamlPath)) ? moduleYamlPath : moduleYmlPath;
+        const content = await fs.readFile(configPath, 'utf8');
+        modConfig = YAML.parse(content) || {};
+      } catch {
+        /* ignore */
+      }
+    }
+
+    version = (pkg.version as string) || (modConfig.version as string) || 'unknown';
+    description = (pkg.description as string) || (modConfig.description as string) || '';
+
+    // Use config name if available, else dirName
+    const name = (modConfig.name as string) || dirName;
+
+    return { name, version, description, type };
   }
 }

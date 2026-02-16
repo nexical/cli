@@ -66,6 +66,7 @@ export default class ModuleAddCommand extends BaseCommand {
       `staging-${Date.now()}-${Math.random().toString(36).substring(7)}`,
     );
     let moduleName = '';
+    let moduleType: 'backend' | 'frontend' = 'backend'; // Default to backend if uncertain, but we should detect.
     let dependencies: string[] = [];
 
     try {
@@ -74,28 +75,68 @@ export default class ModuleAddCommand extends BaseCommand {
       // Shallow clone to inspect
       await clone(cleanUrl, stagingDir, { depth: 1 });
 
-      // Read module.yaml
+      // Search path handling
       const searchPath = subPath ? path.join(stagingDir, subPath) : stagingDir;
+
+      // 1. Detect Module Name & Dependencies
       const moduleYamlPath = path.join(searchPath, 'module.yaml');
       const moduleYmlPath = path.join(searchPath, 'module.yml');
+      const pkgJsonPath = path.join(searchPath, 'package.json');
 
       let configPath = '';
       if (await fs.pathExists(moduleYamlPath)) configPath = moduleYamlPath;
       else if (await fs.pathExists(moduleYmlPath)) configPath = moduleYmlPath;
-      else {
-        throw new Error(`No module.yaml found in ${cleanUrl}${subPath ? '//' + subPath : ''}`);
+
+      // Try to get name from module.yaml/yml
+      if (configPath) {
+        const configContent = await fs.readFile(configPath, 'utf8');
+        const config = YAML.parse(configContent);
+        if (config.name) moduleName = config.name;
+        dependencies = config.dependencies || [];
       }
 
-      const configContent = await fs.readFile(configPath, 'utf8');
-      const config = YAML.parse(configContent);
-
-      if (!config.name) {
-        throw new Error(`Module at ${url} is missing 'name' in module.yaml`);
+      // If no name yet, try package.json
+      if (!moduleName && (await fs.pathExists(pkgJsonPath))) {
+        try {
+          const pkg = await fs.readJson(pkgJsonPath);
+          if (pkg.name) {
+            // Handle scoped packages @modules/name -> name
+            moduleName = pkg.name.startsWith('@modules/') ? pkg.name.split('/')[1] : pkg.name;
+          }
+        } catch {
+          /* ignore */
+        }
       }
-      moduleName = config.name;
-      dependencies = config.dependencies || [];
 
-      // Normalize dependencies to array if object (though spec says list of strings, defensiveness is good)
+      // Fallback to git repo name if still no name
+      if (!moduleName) {
+        moduleName = path.basename(cleanUrl, '.git');
+      }
+
+      // 2. Detect Module Type
+      // Frontend indicators: ui.yaml, or specifically typed in module.config.mjs (harder to parse statically), or package.json dependencies like 'react'/'astro' (maybe too broad).
+      // Backend indicators: models.yaml, api.yaml, access.yaml.
+
+      const hasUiYaml = await fs.pathExists(path.join(searchPath, 'ui.yaml'));
+      const hasModelsYaml = await fs.pathExists(path.join(searchPath, 'models.yaml'));
+      const hasApiYaml = await fs.pathExists(path.join(searchPath, 'api.yaml'));
+
+      if (hasUiYaml) {
+        moduleType = 'frontend';
+      } else if (hasModelsYaml || hasApiYaml) {
+        moduleType = 'backend';
+      } else {
+        // Fallback: Check checking package.json for "auth-astro" which is common in both, but maybe "react" or "vue" for frontend?
+        // Let's assume Backend default if ambiguous for now, or check for specific folder structure?
+        // Let's look for `src/components` vs `src/services`.
+        if (await fs.pathExists(path.join(searchPath, 'src', 'components'))) {
+          moduleType = 'frontend';
+        } else {
+          moduleType = 'backend';
+        }
+      }
+
+      // Normalize dependencies
       if (dependencies && !Array.isArray(dependencies)) {
         dependencies = Object.keys(dependencies);
       }
@@ -104,39 +145,34 @@ export default class ModuleAddCommand extends BaseCommand {
       await fs.remove(stagingDir);
     }
 
-    // Stage 2: Conflict Detection
-    const targetDir = path.join(projectRoot!, 'modules', moduleName);
-    const relativeTargetDir = path.relative(projectRoot!, targetDir);
+    // Stage 2: Conflict Detection & Path Resolution
+    const modulesBaseDir =
+      moduleType === 'frontend' ? 'apps/frontend/modules' : 'apps/backend/modules';
+    const relativeTargetDir = path.join(modulesBaseDir, moduleName);
+    const targetDir = path.join(projectRoot!, relativeTargetDir);
 
     if (await fs.pathExists(targetDir)) {
       // Check origin
       const existingRemote = await getRemoteUrl(targetDir);
-      // We compare cleanUrl (the repo root).
-      // normalize both
       const normExisting = existingRemote.replace(/\.git$/, '');
       const normNew = cleanUrl.replace(/\.git$/, '');
 
       if (normExisting !== normNew && existingRemote !== '') {
         throw new Error(
-          `Dependency Conflict! Module '${moduleName}' exists but remote '${existingRemote}' does not match '${cleanUrl}'.`,
+          `Dependency Conflict! Module '${moduleName}' exists in ${moduleType} but remote '${existingRemote}' does not match '${cleanUrl}'.`,
         );
       }
 
-      this.info(`Module ${moduleName} already installed.`);
-      // Proceed to recurse, but skip add
+      this.info(`Module ${moduleName} already installed in ${moduleType}.`);
     } else {
       // Stage 3: Submodule Add
-      this.info(`Installing ${moduleName} to ${relativeTargetDir}...`);
-      // We install the ROOT repo.
-      // IMPORTANT: If subPath exists, "Identity is Internal" means we name the folder `moduleName`.
-      // But the CONTENT will be the whole repo.
-      // If the user meant to only have the subdir, we can't do that with submodule add easily without manual git plumbing.
-      // Given instructions, I will proceed with submodule add of root repo to target dir.
+      this.info(`Installing ${moduleName} (${moduleType}) to ${relativeTargetDir}...`);
+      await fs.ensureDir(path.dirname(targetDir)); // Ensure apps/backend/modules exists
       await runCommand(`git submodule add ${cleanUrl} ${relativeTargetDir}`, projectRoot!);
     }
 
     // Update nexical.yaml
-    await this.addToConfig(moduleName);
+    await this.addToConfig(moduleName, moduleType);
 
     // Stage 4: Recurse
     if (dependencies.length > 0) {
@@ -147,12 +183,11 @@ export default class ModuleAddCommand extends BaseCommand {
     }
   }
 
-  private async addToConfig(moduleName: string) {
+  private async addToConfig(moduleName: string, type: 'backend' | 'frontend') {
     const projectRoot = this.projectRoot as string;
     const configPath = path.join(projectRoot, 'nexical.yaml');
 
     if (!(await fs.pathExists(configPath))) {
-      // Not strictly required to exist for all operations, but good to have if we are tracking modules.
       logger.warn('nexical.yaml not found, skipping module list update.');
       return;
     }
@@ -161,12 +196,20 @@ export default class ModuleAddCommand extends BaseCommand {
       const content = await fs.readFile(configPath, 'utf8');
       const config = YAML.parse(content) || {};
 
-      if (!config.modules) config.modules = [];
+      if (!config.modules) config.modules = {};
 
-      if (!config.modules.includes(moduleName)) {
-        config.modules.push(moduleName);
+      // Migration: If modules is array, convert to object
+      if (Array.isArray(config.modules)) {
+        const oldModules = config.modules;
+        config.modules = { backend: oldModules, frontend: [] }; // Assume old were backend? Or just move them to backend for safety.
+      }
+
+      if (!config.modules[type]) config.modules[type] = [];
+
+      if (!config.modules[type].includes(moduleName)) {
+        config.modules[type].push(moduleName);
         await fs.writeFile(configPath, YAML.stringify(config));
-        logger.debug(`Added ${moduleName} to nexical.yaml modules list.`);
+        logger.debug(`Added ${moduleName} to nexical.yaml modules.${type} list.`);
       }
     } catch (e: unknown) {
       if (e instanceof Error) {

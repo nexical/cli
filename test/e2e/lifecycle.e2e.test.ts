@@ -122,7 +122,7 @@ if (args[0] === 'build') {
         'module',
         'add',
         moduleDir,
-        'my-test-module', // Explicit name
+        // Name is inferred from module.yaml
       ],
       projectDir,
       { env },
@@ -132,7 +132,8 @@ if (args[0] === 'build') {
       console.error('Module Add Failed:', modResult.stderr || modResult.stdout);
     }
     expect(modResult.exitCode).toBe(0);
-    expect(fs.existsSync(path.join(projectDir, 'modules/my-test-module'))).toBe(true);
+    // Defaults to backend module
+    expect(fs.existsSync(path.join(projectDir, 'apps/backend/modules/my-test-module'))).toBe(true);
 
     // --- STEP 3: BUILD ---
     // Run: nexical run build

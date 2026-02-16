@@ -38,8 +38,28 @@ export default class RunCommand extends BaseCommand {
     // Handle module:script syntax
     if (script.includes(':')) {
       const [moduleName, name] = script.split(':');
-      execPath = path.resolve(projectRoot, 'modules', moduleName);
       scriptName = name;
+
+      const locations = [
+        { type: 'backend', path: `apps/backend/modules/${moduleName}` },
+        { type: 'frontend', path: `apps/frontend/modules/${moduleName}` },
+        { type: 'legacy', path: `modules/${moduleName}` },
+      ];
+
+      let found = false;
+      for (const loc of locations) {
+        const absPath = path.resolve(projectRoot, loc.path);
+        if (await fs.pathExists(absPath)) {
+          execPath = absPath;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        this.error(`Module ${moduleName} not found.`);
+        return;
+      }
 
       logger.debug(`Resolving module script: ${moduleName}:${scriptName} at ${execPath}`);
     } else {

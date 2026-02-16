@@ -20,17 +20,31 @@ export default class ModuleUpdateCommand extends BaseCommand {
 
     try {
       if (name) {
-        const relativePath = `modules/${name}`;
-        const fullPath = path.resolve(projectRoot, relativePath);
+        // Check locations
+        const locations = [
+          { type: 'backend', path: `apps/backend/modules/${name}` },
+          { type: 'frontend', path: `apps/frontend/modules/${name}` },
+          { type: 'legacy', path: `modules/${name}` },
+        ];
 
-        if (!(await fs.pathExists(fullPath))) {
+        let targetLoc: { type: string; path: string } | null = null;
+
+        for (const loc of locations) {
+          const absPath = path.resolve(projectRoot, loc.path);
+          if (await fs.pathExists(absPath)) {
+            targetLoc = loc;
+            break;
+          }
+        }
+
+        if (!targetLoc) {
           this.error(`Module ${name} not found.`);
           return;
         }
 
+        const relativePath = targetLoc.path;
+
         // Update specific module
-        // We enter the directory and pull? Or generic submodule update?
-        // Generic submodule update --remote src/modules/name
         await runCommand(`git submodule update --remote --merge ${relativePath}`, projectRoot);
       } else {
         // Update all

@@ -1,132 +1,133 @@
-// import { BaseCommand } from '@nexical/cli-core';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ModuleListCommand from '../../../../src/commands/module/list.js';
 import fs from 'fs-extra';
 
-vi.mock('@nexical/cli-core', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@nexical/cli-core')>();
-  return {
-    ...mod,
-    logger: {
-      ...mod.logger,
-      success: vi.fn(),
-      info: vi.fn(),
-      debug: vi.fn(),
-      error: vi.fn(),
-      warn: vi.fn(),
-    },
-    runCommand: vi.fn(),
-  };
-});
 vi.mock('fs-extra');
 
 describe('ModuleListCommand', () => {
   let command: ModuleListCommand;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let consoleTableSpy: any;
+  const projectRoot = '/mock/project';
 
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    command = new ModuleListCommand({}, { rootDir: '/mock/root' });
-    consoleTableSpy = vi.spyOn(console, 'table').mockImplementation(() => {});
-    vi.spyOn(command, 'error').mockImplementation(() => {});
-    vi.spyOn(command, 'success').mockImplementation(() => {});
-    vi.spyOn(command, 'info').mockImplementation(() => {});
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.pathExists).mockImplementation(async (p: any) => {
-      if (p.includes('app.yml') || p.includes('nexical.yml')) return true;
-      return true;
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
-    await command.init();
-  });
-
-  afterEach(() => {
+  beforeEach(() => {
     vi.resetAllMocks();
-  });
+    command = new ModuleListCommand({} as any, { rootDir: projectRoot });
+    (command as any).projectRoot = projectRoot;
+    vi.spyOn(console, 'table').mockImplementation(() => {});
+    vi.spyOn(command, 'info').mockImplementation(() => {});
 
-  it('should have correct static properties', () => {
-    expect(ModuleListCommand.usage).toContain('module list');
-    expect(ModuleListCommand.description).toBeDefined();
-    expect(ModuleListCommand.requiresProject).toBe(true);
-  });
-
-  it('should error if project root is missing', async () => {
-    command = new ModuleListCommand({}, { rootDir: undefined });
-    vi.spyOn(command, 'init').mockImplementation(async () => {});
-    vi.spyOn(command, 'error').mockImplementation(() => {});
-
-    await command.runInit({});
-    expect(command.error).toHaveBeenCalledWith(
-      expect.stringContaining('requires to be run within an app project'),
-      1,
-    );
-  });
-
-  it('should handle missing modules directory', async () => {
-    vi.mocked(fs.pathExists).mockImplementation(async () => false);
-    await command.run();
-    expect(command.info).toHaveBeenCalledWith(expect.stringContaining('No modules installed'));
-  });
-
-  it('should list modules with details', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.readdir).mockResolvedValue(['mod1', 'file.txt', 'mod2', 'mod3', 'mod4'] as any);
-    // Mock directory check: mod1=dir, file.txt=file, mod2=dir, mod3=dir
-    vi.mocked(fs.stat).mockImplementation(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async (p: any) =>
-        ({
-          isDirectory: () => !p.includes('file.txt'),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        }) as any,
-    );
-
-    // Mock package.json existence: mod1=yes, mod2=no, mod3=yes
-    // Also ensure modules directory itself exists!
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.pathExists).mockImplementation(async (p: any) => {
-      if (p.includes('app.yml') || p.includes('nexical.yml')) return true;
-      if (p.endsWith('/modules')) return true;
-      return p.includes('package.json') && !p.includes('mod2');
+    // Default mocks for info gathering
+    (fs.readJson as unknown as { mockResolvedValue: any }).mockResolvedValue({});
+    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('');
+    (fs.pathExists as unknown as { mockResolvedValue: any }).mockResolvedValue(false);
+    (fs.stat as unknown as { mockResolvedValue: any }).mockResolvedValue({
+      isDirectory: () => true,
     });
+  });
 
-    // Mock reading json: mod1=valid, mod3=invalid, mod4=empty
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.readJson).mockImplementation(async (p: any) => {
-      if (p.includes('mod3')) throw new Error('Invalid JSON');
-      if (p.includes('mod4')) return {}; // No version/desc
-      return { version: '1.0.0', description: 'Desc' };
+  it('should list modules from both backend and frontend', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation(
+      (p: string) => true,
+    );
+    (fs.readdir as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('backend')) return ['mod-b'];
+      if (p.includes('frontend')) return ['mod-f'];
+      return [];
     });
 
     await command.run();
 
-    // mod1: listed with version
-    // file.txt: ignored
-    // mod2: listed with unknown version (dir exists, no pkg.json)
-    // mod3: listed with unknown version (invalid pkg.json)
-    // mod4: listed with unknown/empty (fallback logic)
-    expect(consoleTableSpy).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        { name: 'mod1', version: '1.0.0', description: 'Desc' },
-        { name: 'mod2', version: 'unknown', description: '' },
-        { name: 'mod3', version: 'unknown', description: '' },
-        { name: 'mod4', version: 'unknown', description: '' },
-      ]),
-    );
+    // eslint-disable-next-line no-console
+    expect(console.table).toHaveBeenCalledWith([
+      { name: 'mod-b', type: 'backend', version: 'unknown', description: '' },
+      { name: 'mod-f', type: 'frontend', version: 'unknown', description: '' },
+    ]);
   });
 
-  it('should handle empty modules directory', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.readdir).mockResolvedValue([] as any);
+  it('should handle empty module directories', async () => {
+    (fs.pathExists as unknown as { mockReturnValue: any }).mockReturnValue(true);
+    (fs.readdir as unknown as { mockResolvedValue: any }).mockResolvedValue([]);
+
     await command.run();
     expect(command.info).toHaveBeenCalledWith('No modules installed.');
   });
 
-  it('should handle failure during list', async () => {
-    vi.mocked(fs.readdir).mockRejectedValue(new Error('FS Error'));
+  it('should sort modules by name', async () => {
+    (fs.pathExists as unknown as { mockReturnValue: any }).mockReturnValue(true);
+    (fs.readdir as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('backend')) return ['z-mod', 'a-mod'];
+      return [];
+    });
+
     await command.run();
-    expect(command.error).toHaveBeenCalledWith(expect.stringContaining('Failed to list modules'));
+
+    // eslint-disable-next-line no-console
+    expect(console.table).toHaveBeenCalledWith([
+      { name: 'a-mod', type: 'backend', version: 'unknown', description: '' },
+      { name: 'z-mod', type: 'backend', version: 'unknown', description: '' },
+    ]);
+  });
+
+  it('should handle missing directories', async () => {
+    (fs.pathExists as any).mockReturnValue(false);
+    await command.run();
+    expect(command.info).toHaveBeenCalledWith('No modules installed.');
+  });
+
+  it('should handle one directory missing and one empty', async () => {
+    (fs.pathExists as any).mockImplementation((p: string) => p.includes('backend'));
+    (fs.readdir as unknown as { mockResolvedValue: any }).mockResolvedValue([]);
+    await command.run();
+    expect(command.info).toHaveBeenCalledWith('No modules installed.');
+  });
+
+  it('should handle backend empty and frontend not empty', async () => {
+    (fs.pathExists as unknown as { mockReturnValue: any }).mockReturnValue(true);
+    (fs.readdir as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('backend')) return [];
+      if (p.includes('frontend')) return ['front-mod'];
+      return [];
+    });
+    await command.run();
+    // eslint-disable-next-line no-console
+    expect(console.table).toHaveBeenCalledWith([
+      { name: 'front-mod', type: 'frontend', version: 'unknown', description: '' },
+    ]);
+  });
+
+  it('should handle non-directory entries', async () => {
+    (fs.pathExists as unknown as { mockReturnValue: any }).mockReturnValue(true);
+    (fs.readdir as any).mockResolvedValue(['file.txt']);
+    (fs.stat as any).mockResolvedValue({ isDirectory: () => false });
+
+    await command.run();
+    expect(command.info).toHaveBeenCalledWith('No modules installed.');
+  });
+
+  it('should handle empty config and package.json', async () => {
+    (fs.pathExists as unknown as { mockReturnValue: any }).mockReturnValue(true);
+
+    // Config files exist check returns true, but readJson/readFile fail or return null
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation(
+      (p: string) => true,
+    );
+
+    // Only return module for backend path to avoid duplicates in test output
+    (fs.readdir as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('apps/backend/modules')) return ['mod-a'];
+      return [];
+    });
+
+    (fs.stat as unknown as { mockResolvedValue: any }).mockResolvedValue({
+      isDirectory: () => true,
+    });
+    (fs.readJson as any).mockResolvedValue(null);
+    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue(''); // Empty string -> YAML.parse returns null/undefined
+
+    await command.run();
+
+    // eslint-disable-next-line no-console
+    expect(console.table).toHaveBeenCalledWith([
+      { name: 'mod-a', type: 'backend', version: 'unknown', description: '' },
+    ]);
   });
 });

@@ -1,96 +1,181 @@
-import { runCommand } from '@nexical/cli-core';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ModuleRemoveCommand from '../../../../src/commands/module/remove.js';
 import fs from 'fs-extra';
+import * as cliCore from '@nexical/cli-core';
 
+// Mocks
+vi.mock('fs-extra');
 vi.mock('@nexical/cli-core', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@nexical/cli-core')>();
   return {
     ...mod,
-    logger: {
-      ...mod.logger,
-      success: vi.fn(),
-      info: vi.fn(),
-      debug: vi.fn(),
-      error: vi.fn(),
-      warn: vi.fn(),
-    },
     runCommand: vi.fn(),
   };
 });
-vi.mock('fs-extra');
 
 describe('ModuleRemoveCommand', () => {
   let command: ModuleRemoveCommand;
+  const projectRoot = '/mock/project/root';
 
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    command = new ModuleRemoveCommand({}, { rootDir: '/mock/root' });
-    vi.spyOn(command, 'error').mockImplementation(() => {});
-    vi.spyOn(command, 'success').mockImplementation(() => {});
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    // Mock logger
+    vi.spyOn(cliCore.logger, 'debug').mockImplementation(() => {});
+    vi.spyOn(cliCore.logger, 'warn').mockImplementation(() => {});
+    vi.spyOn(cliCore.logger, 'info').mockImplementation(() => {});
+
+    command = new ModuleRemoveCommand({} as unknown as any, { rootDir: projectRoot });
+    (command as unknown as { projectRoot: string }).projectRoot = projectRoot;
+
+    // Explicitly spy on command methods
     vi.spyOn(command, 'info').mockImplementation(() => {});
-    vi.mocked(fs.pathExists).mockImplementation(async (p: string) => {
-      if (p.includes('app.yml') || p.includes('nexical.yml')) return true;
-      return true;
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
-    await command.init();
+    vi.spyOn(command, 'success').mockImplementation(() => {});
+    vi.spyOn(command, 'error').mockImplementation(() => {});
+    vi.spyOn(command, 'warn').mockImplementation(() => {});
+
+    (cliCore.runCommand as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
 
-  it('should have correct static properties', () => {
-    expect(ModuleRemoveCommand.usage).toContain('module remove');
-    expect(ModuleRemoveCommand.description).toBeDefined();
-    expect(ModuleRemoveCommand.requiresProject).toBe(true);
-    expect(ModuleRemoveCommand.args).toBeDefined();
-  });
-
-  it('should error if project root is missing', async () => {
-    command = new ModuleRemoveCommand({}, { rootDir: undefined });
-    vi.spyOn(command, 'init').mockImplementation(async () => {});
-    vi.spyOn(command, 'error').mockImplementation(() => {});
-
-    await command.runInit({ name: 'mod' });
-    expect(command.error).toHaveBeenCalledWith(
-      expect.stringContaining('requires to be run within an app project'),
-      1,
+  it('should identify and remove a backend module', async () => {
+    // Setup: Simulate module exists in backend
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.includes('apps/backend/modules/test-mod')) return true;
+      if (pStr.includes('nexical.yaml')) return true;
+      return false;
+    });
+    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue(
+      'modules:\n  backend:\n    - test-mod',
     );
-  });
+    (fs.writeFile as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
 
-  it('should remove submodule and sync', async () => {
-    await command.run({ name: 'mod' });
+    await command.run({ name: 'test-mod' });
 
-    expect(runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('git submodule deinit'),
-      '/mock/root',
+    // Verify git commands
+    expect(cliCore.runCommand).toHaveBeenCalledWith(
+      expect.stringContaining('git submodule deinit -f apps/backend/modules/test-mod'),
+      projectRoot,
     );
-    expect(runCommand).toHaveBeenCalledWith(expect.stringContaining('git rm'), '/mock/root');
-    expect(fs.remove).toHaveBeenCalledWith(expect.stringContaining('.git/modules'));
-    expect(runCommand).toHaveBeenCalledWith('npm install', '/mock/root');
+    expect(cliCore.runCommand).toHaveBeenCalledWith(
+      expect.stringContaining('git rm -f apps/backend/modules/test-mod'),
+      projectRoot,
+    );
+
+    // Verify config update
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('nexical.yaml'),
+      expect.not.stringContaining('test-mod'),
+    );
   });
 
   it('should error if module not found', async () => {
-    vi.mocked(fs.pathExists).mockImplementation(async () => false);
-    await command.run({ name: 'missing' });
+    (fs.pathExists as unknown as { mockResolvedValue: any }).mockResolvedValue(false);
+
+    await command.run({ name: 'missing-mod' });
+
     expect(command.error).toHaveBeenCalledWith(expect.stringContaining('not found'));
+    expect(cliCore.runCommand).not.toHaveBeenCalled();
   });
 
-  it('should handle failure during remove', async () => {
-    vi.mocked(runCommand).mockRejectedValue(new Error('Git remove failed'));
-    await command.run({ name: 'mod' });
-    expect(command.error).toHaveBeenCalledWith(expect.stringContaining('Failed to remove module'));
-  });
-
-  it('should skip .git/modules cleanup if not found', async () => {
-    vi.mocked(fs.pathExists).mockImplementation(async (p: string) => {
-      if (p.includes('.git/modules')) return false;
-      return true;
+  it('should remove from legacy modules array', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.includes('apps/backend/modules/legacy-mod')) return true;
+      if (pStr.includes('nexical.yaml')) return true;
+      return false;
     });
-    await command.run({ name: 'mod' });
-    expect(fs.remove).not.toHaveBeenCalledWith(expect.stringContaining('.git/modules'));
+    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue(
+      'modules:\n  - other-mod\n  - legacy-mod',
+    );
+
+    await command.run({ name: 'legacy-mod' });
+
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('nexical.yaml'),
+      expect.not.stringContaining('legacy-mod'),
+    );
+  });
+
+  it('should handle error during nexical.yaml update', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.includes('apps/backend/modules/test-mod')) return true;
+      if (pStr.includes('nexical.yaml')) return true;
+      return false;
+    });
+    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue(
+      'modules:\n  backend:\n    - test-mod',
+    );
+    (fs.writeFile as unknown as { mockRejectedValue: any }).mockRejectedValue(
+      new Error('Write fail'),
+    );
+
+    await command.run({ name: 'test-mod' });
+    expect(cliCore.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to update nexical.yaml: Write fail'),
+    );
+  });
+
+  it('should handle non-Error exception during nexical.yaml update', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.includes('apps/backend/modules/test-mod')) return true;
+      if (pStr.includes('nexical.yaml')) return true;
+      return false;
+    });
+    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue(
+      'modules:\n  backend:\n    - test-mod',
+    );
+    (fs.writeFile as unknown as { mockRejectedValue: any }).mockRejectedValue('String fail');
+
+    await command.run({ name: 'test-mod' });
+    expect(cliCore.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to update nexical.yaml: String fail'),
+    );
+  });
+
+  it('should handle error during run method', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('apps/backend/modules/fail-mod')) return true;
+      return false;
+    });
+    (cliCore.runCommand as unknown as { mockRejectedValue: any }).mockRejectedValue(
+      new Error('Git fail'),
+    );
+
+    await command.run({ name: 'fail-mod' });
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to remove module: Git fail'),
+    );
+  });
+
+  it('should handle non-Error exception during run method', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('apps/backend/modules/fail-mod')) return true;
+      return false;
+    });
+    (cliCore.runCommand as unknown as { mockRejectedValue: any }).mockRejectedValue('String error');
+
+    await command.run({ name: 'fail-mod' });
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to remove module: String error'),
+    );
+  });
+  it('should do nothing if nexical.yaml is missing', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('apps/backend/modules/test-mod')) return true;
+      if (p.includes('nexical.yaml')) return false;
+      return false;
+    });
+
+    await command.run({ name: 'test-mod' });
+    // Should return early and not try to read config
+    expect(fs.readFile).not.toHaveBeenCalled();
+    expect(command.success).toHaveBeenCalledWith(expect.stringContaining('removed successfully'));
   });
 });

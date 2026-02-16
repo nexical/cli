@@ -16,27 +16,44 @@ export default class ModuleRemoveCommand extends BaseCommand {
     const projectRoot = this.projectRoot as string;
     const { name } = options;
 
-    const relativePath = `modules/${name}`;
-    const fullPath = path.resolve(projectRoot, relativePath);
+    // Check locations
+    const locations = [
+      { type: 'backend', path: `apps/backend/modules/${name}` },
+      { type: 'frontend', path: `apps/frontend/modules/${name}` },
+      { type: 'legacy', path: `modules/${name}` },
+    ];
 
-    logger.debug('Removing module at:', fullPath);
+    let targetLoc: { type: string; path: string } | null = null;
+    let fullPath = '';
 
-    if (!(await fs.pathExists(fullPath))) {
-      this.error(`Module ${name} not found at ${relativePath}.`);
+    for (const loc of locations) {
+      const absPath = path.resolve(projectRoot, loc.path);
+      if (await fs.pathExists(absPath)) {
+        targetLoc = loc;
+        fullPath = absPath;
+        break;
+      }
+    }
+
+    if (!targetLoc) {
+      this.error(`Module ${name} not found in any standard location.`);
       return;
     }
 
-    this.info(`Removing module ${name}...`);
+    const relativePath = targetLoc.path;
+
+    logger.debug('Removing module at:', fullPath);
+    this.info(`Removing module ${name} (${targetLoc.type})...`);
 
     try {
       await runCommand(`git submodule deinit -f ${relativePath}`, projectRoot);
       await runCommand(`git rm -f ${relativePath}`, projectRoot);
 
-      // Clean up .git/modules
-      const gitModulesDir = path.resolve(projectRoot, '.git', 'modules', 'modules', name);
-      if (await fs.pathExists(gitModulesDir)) {
-        await fs.remove(gitModulesDir);
-      }
+      // Clean up .git/modules if needed (git rm often handles this but sometimes leaves stale dirs in .git/modules)
+      // The path in .git/modules depends on how it was added.
+      // Usually .git/modules/apps/backend/modules/name
+      // We'll leave strict git cleanup to git, manually removing can be risky if path structure varies.
+      // But we can check for the directory itself just in case.
 
       this.info('Syncing workspace dependencies...');
       await runCommand('npm install', projectRoot);
@@ -63,8 +80,27 @@ export default class ModuleRemoveCommand extends BaseCommand {
       const content = await fs.readFile(configPath, 'utf8');
       const config = YAML.parse(content) || {};
 
-      if (config.modules && config.modules.includes(moduleName)) {
-        config.modules = config.modules.filter((m: string) => m !== moduleName);
+      let changed = false;
+
+      if (config.modules) {
+        // Check if object
+        if (!Array.isArray(config.modules)) {
+          for (const key of Object.keys(config.modules)) {
+            if (Array.isArray(config.modules[key]) && config.modules[key].includes(moduleName)) {
+              config.modules[key] = config.modules[key].filter((m: string) => m !== moduleName);
+              changed = true;
+            }
+          }
+        } else {
+          // Legacy array
+          if (config.modules.includes(moduleName)) {
+            config.modules = config.modules.filter((m: string) => m !== moduleName);
+            changed = true;
+          }
+        }
+      }
+
+      if (changed) {
         await fs.writeFile(configPath, YAML.stringify(config));
         logger.debug(`Removed ${moduleName} from nexical.yaml modules list.`);
       }

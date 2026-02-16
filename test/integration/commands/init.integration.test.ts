@@ -81,5 +81,20 @@ describe('InitCommand Integration', () => {
     // However, `InitCommand` runs `npm install`. If that fails, the command throws/exits.
     // We provided a minimal package.json so it should succeed.
     expect(fs.existsSync(path.join(targetPath, 'node_modules'))).toBe(true);
-  }, 60000); // Increase timeout for real git/npm ops
+  }, 60000);
+
+  it('should initialize with a custom repo', async () => {
+    const targetProjectName = 'custom-repo-project';
+    const targetPath = path.join(tempDir, targetProjectName);
+    const cli = new CLI({ commandName: 'nexical' });
+    const command = new InitCommand(cli);
+
+    await command.run({
+      directory: targetPath,
+      repo: starterRepoDir, // Reusing starter repo as "custom"
+    });
+
+    expect(fs.existsSync(targetPath)).toBe(true);
+    expect(fs.existsSync(path.join(targetPath, 'package.json'))).toBe(true);
+  }, 60000);
 });
