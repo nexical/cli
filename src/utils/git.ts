@@ -10,8 +10,27 @@ export async function clone(
   options: { recursive?: boolean; depth?: number } = {},
 ): Promise<void> {
   const { recursive = false, depth } = options;
-  const cmd = `git clone ${recursive ? '--recursive ' : ''}${depth ? `--depth ${depth} ` : ''}${url} .`;
-  logger.debug(`Git clone: ${url} to ${destination}`);
+  const args = `${recursive ? '--recursive ' : ''}${depth ? `--depth ${depth} ` : ''}${url} .`;
+
+  // Attempt 1: Anonymous (no credentials)
+  // We use execAsync directly here to handle the error silently if it fails due to auth
+  try {
+    const cmd = `git -c credential.helper= clone ${args}`;
+    logger.debug(`Git clone (anonymous): ${url} to ${destination}`);
+    const { stdout } = await execAsync(cmd, { cwd: destination });
+    if (stdout) {
+      console.log(stdout);
+    }
+    return;
+  } catch (e) {
+    logger.debug(
+      `Anonymous clone failed (${e instanceof Error ? e.message : String(e)}), retrying with default credentials...`,
+    );
+  }
+
+  // Attempt 2: Default (Authenticated or whatever is configured)
+  const cmd = `git clone ${args}`;
+  logger.debug(`Git clone (authenticated): ${url} to ${destination}`);
   await runCommand(cmd, destination);
 }
 
@@ -31,6 +50,28 @@ export async function updateSubmodules(cwd: string): Promise<void> {
     'git submodule foreach --recursive "git checkout main && git pull origin main"',
     cwd,
   );
+}
+
+export async function addSubmodule(url: string, path: string, cwd: string): Promise<void> {
+  // Attempt 1: Anonymous
+  try {
+    const cmd = `git -c credential.helper= submodule add ${url} ${path}`;
+    logger.debug(`Git submodule add (anonymous): ${url} to ${path}`);
+    const { stdout } = await execAsync(cmd, { cwd });
+    if (stdout) {
+      console.log(stdout);
+    }
+    return;
+  } catch (e) {
+    logger.debug(
+      `Anonymous submodule add failed (${e instanceof Error ? e.message : String(e)}), retrying with default credentials...`,
+    );
+  }
+
+  // Attempt 2: Default
+  const cmd = `git submodule add ${url} ${path}`;
+  logger.debug(`Git submodule add (authenticated): ${url} to ${path}`);
+  await runCommand(cmd, cwd);
 }
 
 export async function checkoutOrphan(branch: string, cwd: string): Promise<void> {

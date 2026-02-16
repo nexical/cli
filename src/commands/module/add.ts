@@ -1,7 +1,7 @@
 import { type CommandDefinition, BaseCommand, logger, runCommand } from '@nexical/cli-core';
 import fs from 'fs-extra';
 import path from 'path';
-import { clone, getRemoteUrl } from '../../utils/git.js';
+import { clone, getRemoteUrl, addSubmodule } from '../../utils/git.js';
 import { resolveGitUrl } from '../../utils/url-resolver.js';
 import YAML from 'yaml';
 
@@ -168,7 +168,7 @@ export default class ModuleAddCommand extends BaseCommand {
       // Stage 3: Submodule Add
       this.info(`Installing ${moduleName} (${moduleType}) to ${relativeTargetDir}...`);
       await fs.ensureDir(path.dirname(targetDir)); // Ensure apps/backend/modules exists
-      await runCommand(`git submodule add ${cleanUrl} ${relativeTargetDir}`, projectRoot!);
+      await addSubmodule(cleanUrl, relativeTargetDir, projectRoot!);
     }
 
     // Update nexical.yaml
