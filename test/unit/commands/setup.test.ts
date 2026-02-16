@@ -103,7 +103,7 @@ describe('SetupCommand', () => {
     vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
 
     const error = new Error('Permission denied');
-     
+
     (error as unknown as { code: string }).code = 'EACCES';
     vi.mocked(fs.removeSync).mockImplementationOnce(() => {
       throw error;
@@ -112,6 +112,48 @@ describe('SetupCommand', () => {
     await command.run();
 
     expect(command.error).toHaveBeenCalledWith(expect.stringContaining('Failed to symlink'));
+  });
+
+  it('should ignore ENOENT error during removal', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
+
+    const error = new Error('Not found');
+    (error as unknown as { code: string }).code = 'ENOENT';
+    vi.mocked(fs.removeSync).mockImplementationOnce(() => {
+      throw error;
+    });
+
+    await command.run();
+
+    // Should not log error in outer block as it was re-thrown only for non-ENOENT
+    // Wait, if it's NOT re-thrown (ENOENT), it continues to symlink.
+    expect(fs.symlink).toHaveBeenCalled();
+  });
+
+  it('should re-throw non-object as error during removal', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
+    vi.mocked(fs.removeSync).mockImplementationOnce(() => {
+      throw 'string fail';
+    });
+
+    await command.run();
+    expect(command.error).toHaveBeenCalledWith(expect.stringContaining('string fail'));
+  });
+
+  it('should re-throw error without code during removal', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
+    vi.mocked(fs.removeSync).mockImplementationOnce(() => {
+      throw new Error('No code');
+    });
+
+    await command.run();
+    expect(command.error).toHaveBeenCalledWith(expect.stringContaining('No code'));
   });
 
   it('should log error if symlink fails with Error object', async () => {

@@ -316,4 +316,11 @@ describe('RunCommand', () => {
       expect.stringContaining('Failed to read package.json at /mock/root: String error'),
     );
   });
+
+  it('should error if module not found', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (fs.pathExists as unknown as { mockResolvedValue: any }).mockResolvedValue(false);
+    await command.run({ script: 'nonexistent:sync', args: [] });
+    expect(command.error).toHaveBeenCalledWith('Module nonexistent not found.');
+  });
 });

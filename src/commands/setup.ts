@@ -56,13 +56,14 @@ export default class SetupCommand extends BaseCommand {
             fs.lstatSync(dest);
             fs.removeSync(dest);
           } catch (e: unknown) {
-            if (
+            const isEnoent =
               e &&
               typeof e === 'object' &&
               'code' in e &&
-              (e as { code: string }).code !== 'ENOENT'
-            )
+              (e as { code: string }).code === 'ENOENT';
+            if (!isEnoent) {
               throw e;
+            }
           }
 
           const relSource = path.relative(destDir, source);

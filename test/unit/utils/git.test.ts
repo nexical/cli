@@ -51,13 +51,57 @@ describe('git utils', () => {
   });
 
   it('should clone repository', async () => {
+    // Mock anonymous to fail to test fallback
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      callback(new Error('Anonymous failed'), '', '');
+    });
+
     await git.clone('http://repo.git', 'dest', { recursive: true });
     expect(runCommand).toHaveBeenCalledWith('git clone --recursive http://repo.git .', 'dest');
   });
 
   it('should clone repository with depth', async () => {
+    // Mock anonymous to fail to test fallback
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      callback(new Error('Anonymous failed'), '', '');
+    });
+
     await git.clone('http://repo.git', 'dest', { depth: 1 });
     expect(runCommand).toHaveBeenCalledWith('git clone --depth 1 http://repo.git .', 'dest');
+  });
+
+  it('should try anonymous clone first', async () => {
+    // Mock anonymous to succeed
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      callback(null, 'Done', '');
+    });
+
+    await git.clone('http://repo.git', 'dest');
+    expect(mocks.exec).toHaveBeenCalledWith(
+      expect.stringContaining('-c credential.helper='),
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it('should handle anonymous clone with empty stdout', async () => {
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      callback(null, '', '');
+    });
+
+    await git.clone('http://repo.git', 'dest');
+    expect(mocks.exec).toHaveBeenCalled();
+  });
+
+  it('should handle anonymous clone with non-Error exception', async () => {
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      callback('String error' as any, '', '');
+    });
+
+    await git.clone('http://repo.git', 'dest');
+    expect(runCommand).toHaveBeenCalled();
   });
 
   it('should update submodules', async () => {
@@ -110,6 +154,50 @@ describe('git utils', () => {
 
     const url = await git.getRemoteUrl('cwd');
     expect(url).toBe('');
+  });
+
+  it('should add submodule', async () => {
+    // Mock anonymous to fail
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      callback(new Error('Anonymous failed'), '', '');
+    });
+
+    await git.addSubmodule('url', 'path', 'cwd');
+    expect(runCommand).toHaveBeenCalledWith('git submodule add url path', 'cwd');
+  });
+
+  it('should try anonymous submodule add first', async () => {
+    // Mock anonymous to succeed
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      callback(null, 'Done', '');
+    });
+
+    await git.addSubmodule('url', 'path', 'cwd');
+    expect(mocks.exec).toHaveBeenCalledWith(
+      expect.stringContaining('-c credential.helper='),
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it('should handle anonymous submodule add with empty stdout', async () => {
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      callback(null, '', '');
+    });
+
+    await git.addSubmodule('url', 'path', 'cwd');
+    expect(mocks.exec).toHaveBeenCalled();
+  });
+
+  it('should handle anonymous submodule add with non-Error exception', async () => {
+    mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      callback('String error' as any, '', '');
+    });
+
+    await git.addSubmodule('url', 'path', 'cwd');
+    expect(runCommand).toHaveBeenCalled();
   });
 });
 

@@ -223,5 +223,46 @@ describe('ProviderRegistry', () => {
         expect.stringContaining('Failed to load local provider'),
       );
     });
+
+    it('should handle non-Error exceptions when loading local provider', async () => {
+      const mockRoot = '/mock/root';
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['broken.ts'] as any);
+      mockJitiRequest.mockRejectedValue('String fail');
+
+      await registry.loadLocalProviders(mockRoot);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load local provider from broken.ts: String fail'),
+      );
+    });
+  });
+
+  describe('Core non-Error cases', () => {
+    it('should handle non-Error in loadCoreProviders readdir', async () => {
+      vi.spyOn(fs, 'access').mockResolvedValue(undefined);
+      vi.spyOn(fs, 'readdir').mockRejectedValue('Readdir string fail');
+      await registry.loadCoreProviders();
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Readdir string fail'));
+    });
+
+    it('should handle non-Error during registration in loadCoreProviders', async () => {
+      vi.spyOn(fs, 'access').mockResolvedValue(undefined);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['fail-registration.js'] as any);
+
+      // Mock registerProviderFromModule to throw a string
+      const regSpy = vi
+        .spyOn(registry as any, 'registerProviderFromModule')
+        .mockImplementation(() => {
+          throw 'Registration string fail';
+        });
+
+      // Mock path.join to return a known string for vi.doMock
+      vi.spyOn(path, 'join').mockReturnValue('MOCK_REG_FAIL');
+      vi.doMock('MOCK_REG_FAIL', () => ({ default: {} }));
+
+      await registry.loadCoreProviders();
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Registration string fail'));
+
+      regSpy.mockRestore();
+    });
   });
 });

@@ -43,6 +43,7 @@ describe('ModuleAddCommand', () => {
     (fs.remove as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
     (fs.writeFile as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
     (gitUtils.clone as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
+    (gitUtils.addSubmodule as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
     (cliCore.runCommand as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
   });
 
@@ -69,10 +70,9 @@ describe('ModuleAddCommand', () => {
     await command.run({ url: repoUrl });
 
     expect(gitUtils.clone).toHaveBeenCalled();
-    expect(cliCore.runCommand).toHaveBeenCalledWith(
-      expect.stringContaining(
-        `git submodule add ${repoUrl} apps/backend/modules/my-backend-module`,
-      ),
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      repoUrl,
+      'apps/backend/modules/my-backend-module',
       projectRoot,
     );
   });
@@ -95,10 +95,9 @@ describe('ModuleAddCommand', () => {
 
     await command.run({ url: repoUrl });
 
-    expect(cliCore.runCommand).toHaveBeenCalledWith(
-      expect.stringContaining(
-        `git submodule add ${repoUrl} apps/frontend/modules/my-frontend-module`,
-      ),
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      repoUrl,
+      'apps/frontend/modules/my-frontend-module',
       projectRoot,
     );
   });
@@ -124,8 +123,9 @@ describe('ModuleAddCommand', () => {
 
     await command.run({ url: repoUrl });
 
-    expect(cliCore.runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('apps/backend/modules/pkg-mod'),
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.anything(),
+      'apps/backend/modules/pkg-mod',
       projectRoot,
     );
   });
@@ -142,8 +142,9 @@ describe('ModuleAddCommand', () => {
 
     await command.run({ url: repoUrl });
 
-    expect(cliCore.runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('apps/backend/modules/fallback-mod'),
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.anything(),
+      'apps/backend/modules/fallback-mod',
       projectRoot,
     );
   });
@@ -160,8 +161,9 @@ describe('ModuleAddCommand', () => {
 
     await command.run({ url: repoUrl });
 
-    expect(cliCore.runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('apps/frontend/modules/comp-mod'),
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.anything(),
+      'apps/frontend/modules/comp-mod',
       projectRoot,
     );
   });
@@ -212,8 +214,16 @@ describe('ModuleAddCommand', () => {
 
     await command.run({ url: rootUrl });
 
-    expect(cliCore.runCommand).toHaveBeenCalledWith(expect.stringContaining('root'), projectRoot);
-    expect(cliCore.runCommand).toHaveBeenCalledWith(expect.stringContaining('dep'), projectRoot);
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.stringContaining('root'),
+      expect.anything(),
+      projectRoot,
+    );
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.stringContaining('dep'),
+      expect.anything(),
+      projectRoot,
+    );
   });
 
   it('should throw error on dependency conflict', async () => {
@@ -359,8 +369,9 @@ describe('ModuleAddCommand', () => {
     });
 
     await command.run({ url: 'https://github.com/org/yml.git' });
-    expect(cliCore.runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('yml-mod'),
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.stringContaining('yml'),
+      'apps/backend/modules/yml-mod',
       projectRoot,
     );
   });
@@ -391,8 +402,9 @@ describe('ModuleAddCommand', () => {
     });
 
     await command.run({ url: 'https://github.com/org/obj.git' });
-    expect(cliCore.runCommand).toHaveBeenCalledWith(
-      expect.stringContaining('dep-mod'),
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.stringContaining('dep'),
+      'apps/backend/modules/dep-mod',
       projectRoot,
     );
   });
@@ -434,5 +446,193 @@ describe('ModuleAddCommand', () => {
     expect(writeCall[1]).toContain('modules:');
     expect(writeCall[1]).toContain('backend:');
     expect(writeCall[1]).toContain('new-mod');
+  });
+  it('should handle module name from package.json without scope', async () => {
+    const repoUrl = 'https://github.com/org/noscope-repo.git';
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.endsWith('package.json')) return true;
+      if (pStr.includes('nexical.yaml')) return true;
+      return false;
+    });
+    (fs.readJson as unknown as { mockResolvedValue: any }).mockResolvedValue({
+      name: 'noscope-mod',
+    });
+    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('modules: {}');
+
+    await command.run({ url: repoUrl });
+
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.anything(),
+      'apps/backend/modules/noscope-mod',
+      projectRoot,
+    );
+  });
+
+  it('should handle package.json without name', async () => {
+    const repoUrl = 'https://github.com/org/noname-repo.git';
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.endsWith('package.json')) return true;
+      if (pStr.includes('nexical.yaml')) return true;
+      return false;
+    });
+    (fs.readJson as unknown as { mockResolvedValue: any }).mockResolvedValue({});
+    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('modules: {}');
+
+    await command.run({ url: repoUrl });
+
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.anything(),
+      'apps/backend/modules/noname-repo',
+      projectRoot,
+    );
+  });
+
+  it('should skip adding if already in nexical.yaml', async () => {
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('nexical.yaml')) return true;
+      if (p.endsWith('module.yaml')) return true;
+      return false;
+    });
+    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('nexical.yaml')) return 'modules:\n  backend:\n    - existing';
+      if (p.endsWith('module.yaml')) return 'name: existing\n';
+      return '';
+    });
+
+    await command.run({ url: 'http://example.com/existing.git' });
+
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+  it('should handle missing name in module.yaml', async () => {
+    const repoUrl = 'https://github.com/org/noname-yaml.git';
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.endsWith('module.yaml')) return true;
+      if (pStr.includes('nexical.yaml')) return true;
+      return false;
+    });
+    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.endsWith('module.yaml')) return 'version: 1.0.0\n'; // name missing
+      if (p.includes('nexical.yaml')) return 'modules: {}';
+      return '';
+    });
+
+    await command.run({ url: repoUrl });
+
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      expect.anything(),
+      'apps/backend/modules/noname-yaml',
+      projectRoot,
+    );
+  });
+
+  it('should handle subpath in url', async () => {
+    const repoUrl = 'https://github.com/org/repo.git';
+    const subpath = 'my/sub';
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('nexical.yaml')) return true;
+      if (p.endsWith('module.yaml')) return true;
+      return false;
+    });
+    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('nexical.yaml')) return 'modules: {}';
+      if (p.endsWith('module.yaml')) return 'name: sub-mod\n';
+      return '';
+    });
+
+    await command.run({ url: `${repoUrl}//${subpath}` });
+
+    expect(gitUtils.clone).toHaveBeenCalledWith(repoUrl, expect.anything(), expect.anything());
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      repoUrl,
+      'apps/backend/modules/sub-mod',
+      projectRoot,
+    );
+  });
+  it('should handle url without subpath explicitly', async () => {
+    const repoUrl = 'https://github.com/org/nosub.git';
+    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('nexical.yaml')) return true;
+      if (p.endsWith('module.yaml')) return true;
+      return false;
+    });
+    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+      if (p.includes('nexical.yaml')) return 'modules: {}';
+      if (p.endsWith('module.yaml')) return 'name: nosub-mod\n';
+      return '';
+    });
+
+    await command.run({ url: repoUrl });
+
+    expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
+      repoUrl,
+      'apps/backend/modules/nosub-mod',
+      projectRoot,
+    );
+  });
+  it('should handle dependencies as an object', async () => {
+    const repoUrl = 'https://github.com/org/dep-obj.git';
+
+    // We must ensure that targetDir (apps/backend/modules/dep-obj) does NOT exist for initial call
+    // and ALSO for some-dep if we want to see install logs.
+    (fs.pathExists as any).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.includes('nexical.yaml')) return true;
+      if (pStr.includes('module.yaml')) return true;
+      if (pStr.includes('models.yaml') || pStr.includes('api.yaml')) return true;
+      return false;
+    });
+
+    (fs.readFile as any).mockImplementation((p: string) => {
+      const pStr = p.toString();
+      if (pStr.endsWith('module.yaml')) {
+        if (pStr.includes('staging')) {
+          return 'name: dep-obj\ndependencies:\n  some-dep: "1.0.0"\n';
+        }
+      }
+      if (pStr.includes('nexical.yaml')) return 'modules: {}';
+      return '';
+    });
+
+    await command.run({ url: repoUrl });
+
+    // Check if error was called which might explain failure
+    if ((command.error as any).mock.calls.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log('COMMAND ERROR:', (command.error as any).mock.calls[0][0]);
+    }
+
+    expect(command.info).toHaveBeenCalledWith(expect.stringContaining('Resolving 1 dependencies'));
+  });
+
+  it('should handle already installed module with matching remote', async () => {
+    const repoUrl = 'https://github.com/org/match.git';
+    (fs.pathExists as any).mockImplementation((p: string) => {
+      if (p.includes('apps/backend/modules/match')) return true;
+      return true;
+    });
+    (fs.readFile as any).mockImplementation((p: string) => {
+      if (p.endsWith('module.yaml')) return 'name: match\n';
+      return 'modules: {}';
+    });
+    (gitUtils.getRemoteUrl as any).mockResolvedValue('https://github.com/org/match.git');
+
+    await command.run({ url: repoUrl });
+    expect(command.info).toHaveBeenCalledWith(expect.stringContaining('already installed'));
+  });
+
+  it('should handle already installed module with empty remote', async () => {
+    const repoUrl = 'https://github.com/org/empty-rem.git';
+    (fs.pathExists as any).mockImplementation((p: string) => true);
+    (fs.readFile as any).mockImplementation((p: string) => {
+      if (p.endsWith('module.yaml')) return 'name: empty-rem\n';
+      return 'modules: {}';
+    });
+    (gitUtils.getRemoteUrl as any).mockResolvedValue('');
+
+    await command.run({ url: repoUrl });
+    expect(command.info).toHaveBeenCalledWith(expect.stringContaining('already installed'));
   });
 });

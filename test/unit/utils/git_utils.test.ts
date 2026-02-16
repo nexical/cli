@@ -15,6 +15,13 @@ vi.mock('node:child_process', () => ({
 
 describe('git utils', () => {
   it('should call git clone', async () => {
+    const { exec } = await import('node:child_process');
+    // Mock anonymous failure
+    vi.mocked(exec).mockImplementationOnce(((cmd: string, opts: any, callback: any) => {
+      callback(new Error('fail'), '', '');
+      return {} as any;
+    }) as any);
+
     await git.clone('url', 'dest');
     expect(runCommand).toHaveBeenCalledWith(expect.stringContaining('git clone'), 'dest');
   });

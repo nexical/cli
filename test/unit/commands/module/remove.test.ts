@@ -178,4 +178,34 @@ describe('ModuleRemoveCommand', () => {
     expect(fs.readFile).not.toHaveBeenCalled();
     expect(command.success).toHaveBeenCalledWith(expect.stringContaining('removed successfully'));
   });
+  it('should handle missing modules key in config', async () => {
+    (fs.pathExists as any).mockImplementation((p: string) => true);
+    (fs.readFile as any).mockResolvedValue('key: value');
+
+    await command.run({ name: 'test-mod' });
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('should do nothing if module not found in config lists', async () => {
+    (fs.pathExists as any).mockImplementation((p: string) => true);
+    (fs.readFile as any).mockResolvedValue('modules:\n  backend:\n    - existing-mod');
+
+    await command.run({ name: 'other-mod' });
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('should handle empty or null config from YAML.parse', async () => {
+    (fs.pathExists as any).mockImplementation((p: string) => true);
+    (fs.readFile as any).mockResolvedValue(''); // YAML.parse('') -> null
+
+    await command.run({ name: 'test-mod' });
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+  it('should handle legacy array without the module to remove', async () => {
+    (fs.pathExists as any).mockImplementation((p: string) => true);
+    (fs.readFile as any).mockResolvedValue('modules:\n  - other-mod');
+
+    await command.run({ name: 'test-mod' });
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
 });

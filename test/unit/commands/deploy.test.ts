@@ -257,6 +257,32 @@ describe('DeployCommand', () => {
     await expect(command.run({})).rejects.toThrow('CLI ERROR');
   });
 
+  it('should handle non-Error exceptions during frontend secret resolution', async () => {
+    const mockBackend = {
+      name: 'railway',
+      provision: vi.fn(),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+    };
+    const mockFrontend = {
+      name: 'cloudflare',
+      provision: vi.fn(),
+      getSecrets: vi.fn().mockRejectedValue('String front secret fail'),
+      getVariables: vi.fn().mockResolvedValue({}),
+    };
+    mockRegistry.getDeploymentProvider.mockImplementation((name: string) => {
+      if (name === 'railway') return mockBackend;
+      if (name === 'cloudflare') return mockFrontend;
+    });
+    mockRegistry.getRepositoryProvider.mockReturnValue({
+      configureSecrets: vi.fn(),
+      configureVariables: vi.fn(),
+      generateWorkflow: vi.fn(),
+    });
+
+    await expect(command.run({})).rejects.toThrow('CLI ERROR');
+  });
+
   it('should handle errors during frontend variable resolution', async () => {
     const mockBackend = {
       name: 'railway',
@@ -281,5 +307,49 @@ describe('DeployCommand', () => {
     });
 
     await expect(command.run({})).rejects.toThrow('CLI ERROR');
+  });
+
+  it('should handle non-Error exceptions during frontend variable resolution', async () => {
+    const mockBackend = {
+      name: 'railway',
+      provision: vi.fn(),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+    };
+    const mockFrontend = {
+      name: 'cloudflare',
+      provision: vi.fn(),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockRejectedValue('String front var fail'),
+    };
+    mockRegistry.getDeploymentProvider.mockImplementation((name: string) => {
+      if (name === 'railway') return mockBackend;
+      if (name === 'cloudflare') return mockFrontend;
+    });
+    mockRegistry.getRepositoryProvider.mockReturnValue({
+      configureSecrets: vi.fn(),
+      configureVariables: vi.fn(),
+      generateWorkflow: vi.fn(),
+    });
+
+    await expect(command.run({})).rejects.toThrow('CLI ERROR');
+  });
+
+  it('should throw if frontend provider is not found in registry', async () => {
+    mockRegistry.getDeploymentProvider.mockImplementation((name: string) => {
+      if (name === 'railway') return { name: 'railway' };
+      return undefined;
+    });
+    await expect(command.run({ frontend: 'unknown' })).rejects.toThrow(
+      "Frontend provider 'unknown' not found.",
+    );
+  });
+
+  it('should throw if repo provider is not found in registry', async () => {
+    mockRegistry.getDeploymentProvider.mockReturnValue({ name: 'mock' });
+    mockRegistry.getRepositoryProvider.mockReturnValue(undefined);
+    await expect(command.run({ repo: 'unknown' })).rejects.toThrow(
+      "Repository provider 'unknown' not found.",
+    );
   });
 });
