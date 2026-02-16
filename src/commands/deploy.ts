@@ -6,9 +6,9 @@ import { ProviderRegistry } from '../deploy/registry';
 import { DeploymentContext } from '../deploy/types';
 
 export default class DeployCommand extends BaseCommand {
-  static description = `Deploy the application based on nexical.yaml configuration.
-
-This command orchestrates the deployment of your frontend and backend applications 
+  static usage = 'deploy';
+  static description = 'Deploy the application based on nexical.yaml configuration.';
+  static help = `This command orchestrates the deployment of your frontend and backend applications 
 by interacting with the providers specified in your configuration file.
 
 CONFIGURATION:

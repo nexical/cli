@@ -1,6 +1,6 @@
 {
   "name": "@nexical/cli",
-  "version": "0.11.9",
+  "version": "0.11.10",
   "type": "module",
   "bin": {
     "nexical": "./dist/index.js"
@@ -28,7 +28,7 @@
     ]
   },
   "dependencies": {
-    "@nexical/cli-core": "^0.1.12",
+    "@nexical/cli-core": "^0.1.15",
     "dotenv": "^17.3.1",
     "fast-glob": "^3.3.3",
     "jiti": "^2.6.1",
