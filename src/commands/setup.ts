@@ -6,16 +6,8 @@ export default class SetupCommand extends BaseCommand {
   static description = 'Setup the application environment by symlinking core assets.';
 
   async run() {
-    // We assume we are in the project root
-    // But the CLI might be run from anywhere?
-    // findProjectRoot in index.ts handles finding the root.
-    // BaseCommand has this.projectRoot?
-
-    // BaseCommand doesn't expose projectRoot directly in current implementation seen in memory, checking source if possible?
-    // InitCommand used process.cwd().
-
-    // Let's assume process.cwd() is project root if run via `npm run setup` from root.
-    const rootDir = process.cwd();
+    // Use projectRoot from BaseCommand if available, fallback to cwd
+    const rootDir = this.projectRoot || process.cwd();
 
     // Verify we are in the right place
     if (!fs.existsSync(path.join(rootDir, 'core'))) {

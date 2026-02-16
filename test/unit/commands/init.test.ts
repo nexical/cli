@@ -1,6 +1,7 @@
 import { runCommand } from '@nexical/cli-core';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import InitCommand from '../../../src/commands/init.js';
+import SetupCommand from '../../../src/commands/setup.js';
 import * as git from '../../../src/utils/git.js';
 import fs from 'fs-extra';
 
@@ -34,6 +35,15 @@ vi.mock('../../../src/utils/git.js', () => ({
   getRemoteUrl: vi.fn(),
 }));
 
+vi.mock('../../../src/commands/setup.js', () => {
+  const MockSetup = vi.fn();
+  MockSetup.prototype.init = vi.fn();
+  MockSetup.prototype.run = vi.fn();
+  return {
+    default: MockSetup,
+  };
+});
+
 vi.mock('fs-extra');
 
 describe('InitCommand', () => {
@@ -43,7 +53,9 @@ describe('InitCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     command = new InitCommand({});
-    vi.spyOn(command, 'error').mockImplementation(() => {});
+    vi.spyOn(command, 'error').mockImplementation((msg) => {
+      console.error('COMMAND ERROR:', msg);
+    });
     vi.spyOn(command, 'info').mockImplementation(() => {});
     vi.spyOn(command, 'success').mockImplementation(() => {});
 
@@ -110,6 +122,12 @@ describe('InitCommand', () => {
       'Initial site commit',
       expect.stringContaining(targetDir),
     );
+
+    // SetupCommand verification
+    expect(SetupCommand).toHaveBeenCalled();
+    const setupInstance = vi.mocked(SetupCommand).mock.instances[0];
+    expect(setupInstance.init).toHaveBeenCalled();
+    expect(setupInstance.run).toHaveBeenCalled();
 
     expect(command.success).toHaveBeenCalledWith(expect.stringContaining('successfully'));
   });

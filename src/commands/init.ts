@@ -3,6 +3,7 @@ import * as git from '../utils/git.js';
 import { resolveGitUrl } from '../utils/url-resolver.js';
 import fs from 'fs-extra';
 import path from 'path';
+import SetupCommand from './setup.js';
 
 export default class InitCommand extends BaseCommand {
   static usage = 'init';
@@ -53,6 +54,12 @@ export default class InitCommand extends BaseCommand {
 
       this.info('Setting up upstream remote...');
       await git.renameRemote('origin', 'upstream', targetPath);
+
+      // Run Nexical CLI setup command
+      this.info('Initializing project assets...');
+      const setup = new SetupCommand(this.cli, { ...this.globalOptions, rootDir: targetPath });
+      await setup.init();
+      await setup.run();
 
       // Run setup script
       this.info('Running project setup...');
