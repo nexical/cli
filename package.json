@@ -39,7 +39,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.10.0",
     "@vitest/coverage-v8": "^4.0.15",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-astro": "^1.5.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
@@ -54,7 +54,7 @@
     "tsup": "^8.0.1",
     "tsx": "^4.21.0",
     "typescript": "^5.3.3",
-    "typescript-eslint": "^8.54.0",
+    "typescript-eslint": "^8.56.0",
     "vitest": "^4.0.15"
   }
 }
