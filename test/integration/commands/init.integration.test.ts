@@ -27,6 +27,9 @@ describe('InitCommand Integration', () => {
         },
       }),
       'README.md': '# Starter Template',
+      'core/src/index.ts': 'console.log("core")',
+      'apps/frontend/README.md': '# Frontend',
+      'apps/backend/README.md': '# Backend',
     });
 
     // Set Git Identity for the test process so InitCommand's commit works in CI
