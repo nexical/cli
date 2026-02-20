@@ -65,16 +65,17 @@ if (args[0] === 'build') {
         },
       }),
       'README.md': '# E2E Starter',
-      'nexical.yml': 'name: e2e-test\nversion: 0.0.1', // ESSENTIAL for CLI to recognize project
-      'src/pages/index.astro': '--- ---',
-      'src/core/index.ts': '// core',
-      'src/core/package.json': JSON.stringify({
+      'nexical.yaml': 'name: e2e-test\nversion: 0.0.1', // ESSENTIAL for CLI to recognize project
+      'core/src/index.ts': '// core',
+      'core/package.json': JSON.stringify({
         scripts: {
           build: 'astro build',
           dev: 'astro dev',
           preview: 'astro preview',
         },
       }),
+      'apps/frontend/package.json': '{}',
+      'apps/backend/package.json': '{}',
     });
 
     // 3. Setup Mock Module Repo
