@@ -1,6 +1,7 @@
 {
   "name": "@nexical/cli",
   "version": "0.11.14",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "nexical": "./dist/index.js"
@@ -28,7 +29,7 @@
     ]
   },
   "dependencies": {
-    "@nexical/cli-core": "^0.1.15",
+    "@nexical/cli-core": "^0.1.16",
     "dotenv": "^17.3.1",
     "fast-glob": "^3.3.3",
     "glob": "^13.0.5",
