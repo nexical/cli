@@ -52,7 +52,7 @@ export default class PromptCommand extends BaseCommand {
 
     // Parse additional template flags
     const argv = minimist(options.args || []);
-    const isInteractive = options.interactive || options.i || argv.interactive || argv.i;
+    const isInteractive = !!(options.interactive || options.i || argv.interactive || argv.i);
     const moduleName = options.module || options.m || argv.module || argv.m;
     const modelsArg =
       options.models || argv.models || 'gemini-3-flash-preview,gemini-3-pro-preview';
