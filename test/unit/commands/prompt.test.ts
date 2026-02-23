@@ -37,8 +37,10 @@ describe('PromptCommand', () => {
     vi.spyOn(command, 'error').mockImplementation(() => {});
 
     // Default fs mocks
-    vi.spyOn(fs, 'pathExists').mockResolvedValue(false);
-    vi.spyOn(fs, 'readFile').mockResolvedValue('');
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockResolvedValue(false);
+    vi.mocked(
+      fs.readFile as unknown as (p: string, e: string) => Promise<string>,
+    ).mockResolvedValue('');
 
     // Default PromptRunner mock
     vi.mocked(PromptRunner.run).mockResolvedValue(0);
@@ -107,9 +109,11 @@ describe('PromptCommand', () => {
   });
 
   it('should include generator agents prompts if they exist', async () => {
-    vi.spyOn(fs, 'pathExists').mockImplementation(async (p: string | Buffer | URL) => {
-      return (p as string).includes('packages/generator/prompts/agents');
-    });
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockImplementation(
+      async (p: string | Buffer | URL) => {
+        return (p as string).includes('packages/generator/prompts/agents');
+      },
+    );
 
     await command.run({ promptName: 'test-prompt' });
 
@@ -120,9 +124,11 @@ describe('PromptCommand', () => {
   });
 
   it('should resolve frontend module context', async () => {
-    vi.spyOn(fs, 'pathExists').mockImplementation(async (p: string | Buffer | URL) => {
-      return (p as string).includes('apps/frontend/modules/test-module');
-    });
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockImplementation(
+      async (p: string | Buffer | URL) => {
+        return (p as string).includes('apps/frontend/modules/test-module');
+      },
+    );
 
     await command.run({ promptName: 'test-prompt', module: 'test-module' });
 
@@ -138,9 +144,11 @@ describe('PromptCommand', () => {
   });
 
   it('should resolve backend module context', async () => {
-    vi.spyOn(fs, 'pathExists').mockImplementation(async (p: string | Buffer | URL) => {
-      return (p as string).includes('apps/backend/modules/test-module');
-    });
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockImplementation(
+      async (p: string | Buffer | URL) => {
+        return (p as string).includes('apps/backend/modules/test-module');
+      },
+    );
 
     await command.run({ promptName: 'test-prompt', m: 'test-module' });
 
@@ -156,7 +164,7 @@ describe('PromptCommand', () => {
   });
 
   it('should fail if module not found', async () => {
-    vi.mocked(fs.pathExists).mockResolvedValue(false);
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockResolvedValue(false);
 
     await command.run({ promptName: 'test-prompt', module: 'missing-module' });
 
@@ -167,10 +175,12 @@ describe('PromptCommand', () => {
   });
 
   it('should load AI config from nexical.yaml', async () => {
-    vi.spyOn(fs, 'pathExists').mockImplementation(async (p: string | Buffer | URL) =>
-      (p as string).includes('nexical.yaml'),
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockImplementation(
+      async (p: string | Buffer | URL) => (p as string).includes('nexical.yaml'),
     );
-    vi.spyOn(fs, 'readFile').mockResolvedValue('ai:\n  provider: vertex');
+    vi.mocked(
+      fs.readFile as unknown as (p: string, e: string) => Promise<string>,
+    ).mockResolvedValue('ai:\n  provider: vertex');
     vi.mocked(YAML.parse).mockReturnValue({ ai: { provider: 'vertex' } });
 
     await command.run({ promptName: 'test-prompt' });
@@ -183,10 +193,12 @@ describe('PromptCommand', () => {
   });
 
   it('should handle missing AI config in nexical.yaml', async () => {
-    vi.spyOn(fs, 'pathExists').mockImplementation(async (p: string | Buffer | URL) =>
-      (p as string).includes('nexical.yaml'),
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockImplementation(
+      async (p: string | Buffer | URL) => (p as string).includes('nexical.yaml'),
     );
-    vi.spyOn(fs, 'readFile').mockResolvedValue('name: my-project');
+    vi.mocked(
+      fs.readFile as unknown as (p: string, e: string) => Promise<string>,
+    ).mockResolvedValue('name: my-project');
     vi.mocked(YAML.parse).mockReturnValue({ name: 'my-project' });
 
     await command.run({ promptName: 'test-prompt' });
@@ -199,10 +211,12 @@ describe('PromptCommand', () => {
   });
 
   it('should handle falsy YAML parse result', async () => {
-    vi.spyOn(fs, 'pathExists').mockImplementation(async (p: string | Buffer | URL) =>
-      (p as string).includes('nexical.yaml'),
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockImplementation(
+      async (p: string | Buffer | URL) => (p as string).includes('nexical.yaml'),
     );
-    vi.spyOn(fs, 'readFile').mockResolvedValue('');
+    vi.mocked(
+      fs.readFile as unknown as (p: string, e: string) => Promise<string>,
+    ).mockResolvedValue('');
     vi.mocked(YAML.parse).mockReturnValue(null);
 
     await command.run({ promptName: 'test-prompt' });
@@ -215,10 +229,12 @@ describe('PromptCommand', () => {
   });
 
   it('should handle nexical.yaml parse errors', async () => {
-    vi.spyOn(fs, 'pathExists').mockImplementation(async (p: string | Buffer | URL) =>
-      (p as string).includes('nexical.yaml'),
+    vi.mocked<(p: string) => Promise<boolean>>(fs.pathExists).mockImplementation(
+      async (p: string | Buffer | URL) => (p as string).includes('nexical.yaml'),
     );
-    vi.spyOn(fs, 'readFile').mockResolvedValue('invalid: yaml: :');
+    vi.mocked(
+      fs.readFile as unknown as (p: string, e: string) => Promise<string>,
+    ).mockResolvedValue('invalid: yaml: :');
     vi.mocked(YAML.parse).mockImplementation(() => {
       throw new Error('parse error');
     });
