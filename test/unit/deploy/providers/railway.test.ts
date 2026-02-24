@@ -315,8 +315,10 @@ describe('RailwayProvider', () => {
   });
 
   describe('getVariables', () => {
-    it('should return empty', async () => {
-      expect(await provider.getVariables(mockContext)).toEqual({});
+    it('should return project name', async () => {
+      expect(await provider.getVariables(mockContext)).toEqual({
+        RAILWAY_PROJECT_NAME: 'my-proj',
+      });
     });
   });
 
