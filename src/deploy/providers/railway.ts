@@ -132,7 +132,19 @@ export class RailwayProvider implements DeploymentProvider {
   }
 
   async getVariables(context: DeploymentContext): Promise<Record<string, string>> {
-    return {};
+    const env = (context.options.env as string) || 'production';
+    const baseProjectName = context.config.deploy?.backend?.projectName;
+
+    if (!baseProjectName) {
+      throw new Error(
+        "Railway project name not found in nexical.yaml. Please configure 'deploy.backend.projectName'.",
+      );
+    }
+
+    const projectName = env === 'production' ? baseProjectName : `${baseProjectName}-${env}`;
+    return {
+      RAILWAY_PROJECT_NAME: projectName,
+    };
   }
 
   getCIConfig(): CIConfig {
@@ -140,7 +152,7 @@ export class RailwayProvider implements DeploymentProvider {
       secrets: ['RAILWAY_API_TOKEN'],
       variables: [],
       installSteps: ['npm install -g @railway/cli'],
-      deploySteps: ['railway up --detach'],
+      deploySteps: ['railway up --detach --project=${{ vars.RAILWAY_PROJECT_NAME }}'],
     };
   }
 }
