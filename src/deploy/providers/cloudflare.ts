@@ -45,6 +45,7 @@ export class CloudflareProvider implements HostingProvider {
       const processEnv = {
         ...process.env,
         ...secrets,
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --dns-result-order=ipv4first`.trim(),
       };
       logger.info(`Ensuring Cloudflare Pages project "${projectName}" exists...`);
       try {
@@ -57,6 +58,72 @@ export class CloudflareProvider implements HostingProvider {
           logger.info('Cloudflare project already exists.');
         } else {
           throw err;
+        }
+      }
+
+      // Handle Linked Domains
+      if (app.domain) {
+        const domains = Array.isArray(app.domain) ? app.domain : [app.domain];
+        logger.info(
+          `Linking ${domains.length} domains to Cloudflare Pages project "${projectName}"...`,
+        );
+
+        const apiToken = secrets.CLOUDFLARE_API_TOKEN;
+        const accountId = secrets.CLOUDFLARE_ACCOUNT_ID;
+
+        // Fetch existing domains to avoid redundant calls
+        const listRes = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${projectName}/domains`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiToken}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+
+        if (!listRes.ok) {
+          const errorText = await listRes.text();
+          logger.warn(`Failed to fetch existing linked domains: ${errorText}`);
+        } else {
+          const listJson = (await listRes.json()) as {
+            success: boolean;
+            result: { domain: string }[];
+          };
+          const existingDomains = listJson.success ? listJson.result.map((d) => d.domain) : [];
+
+          for (const domain of domains) {
+            if (existingDomains.includes(domain)) {
+              logger.info(`[Cloudflare Pages] Domain ${domain} is already linked.`);
+              continue;
+            }
+
+            logger.info(`[Cloudflare Pages] Linking domain ${domain}...`);
+            const linkRes = await fetch(
+              `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${projectName}/domains`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${apiToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name: domain }), // Pages API uses 'name' for the domain string in some versions, but docs suggest 'name' or just object. Let's verify 'name' vs 'domain'.
+                // Correction: The API docs say POST body should be { "name": "example.com" }
+              },
+            );
+
+            if (!linkRes.ok) {
+              const errorText = await linkRes.text();
+              // If it failed because it exists but wasn't in list (unlikely but safe)
+              if (errorText.includes('already exists') || errorText.includes('1008')) {
+                logger.info(`[Cloudflare Pages] Domain ${domain} already linked.`);
+              } else {
+                logger.warn(`[Cloudflare Pages] Failed to link domain ${domain}: ${errorText}`);
+              }
+            } else {
+              logger.success(`[Cloudflare Pages] Linked domain ${domain}.`);
+            }
+          }
         }
       }
     } catch (e: unknown) {
@@ -183,6 +250,7 @@ export class CloudflareProvider implements HostingProvider {
     const processEnv = {
       ...process.env,
       ...secrets,
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --dns-result-order=ipv4first`.trim(),
     };
 
     await execAsync(`wrangler pages deploy ${artifactPath} --project-name=${projectName}`, {

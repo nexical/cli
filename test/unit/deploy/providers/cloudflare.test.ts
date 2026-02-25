@@ -107,6 +107,61 @@ describe('CloudflareProvider', () => {
 
       await expect(provider.provision(mockContext, app)).rejects.toThrow('Critical error');
     });
+
+    it('should link custom domains during provision', async () => {
+      process.env.CLOUDFLARE_API_TOKEN = 'tok';
+      process.env.CLOUDFLARE_ACCOUNT_ID = 'acc';
+
+      const mockFetch = vi.fn();
+      vi.stubGlobal('fetch', mockFetch);
+
+      // First call (GET) - return one existing domain
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          result: [{ domain: 'already-linked.com' }],
+        }),
+      });
+
+      // Second call (POST) - link new-domain.com
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          result: { name: 'new-domain.com' },
+        }),
+      });
+
+      const app = {
+        name: 'frontend',
+        provider: 'cloudflare',
+        projectName: 'my-app',
+        domain: ['already-linked.com', 'new-domain.com'],
+      } as AppConfig;
+
+      await provider.provision(mockContext, app);
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('/pages/projects/my-app/domains'),
+        expect.anything(),
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('/pages/projects/my-app/domains'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ name: 'new-domain.com' }),
+        }),
+      );
+      expect(logger.success).toHaveBeenCalledWith(
+        expect.stringContaining('Linked domain new-domain.com'),
+      );
+
+      vi.unstubAllGlobals();
+    });
   });
 
   describe('getSecrets', () => {
