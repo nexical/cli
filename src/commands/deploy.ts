@@ -3,46 +3,28 @@ import dotenv from 'dotenv';
 import { BaseCommand } from '@nexical/cli-core';
 import { ConfigManager } from '../deploy/config-manager';
 import { ProviderRegistry } from '../deploy/registry';
-import { DeploymentContext } from '../deploy/types';
+import { DeploymentContext, HostingProvider, AppConfig } from '../deploy/types';
 
 export default class DeployCommand extends BaseCommand {
   static usage = 'deploy';
   static description = 'Deploy the application based on nexical.yaml configuration.';
-  static help = `This command orchestrates the deployment of your frontend and backend applications 
+  static help = `This command orchestrates the deployment of your applications 
 by interacting with the providers specified in your configuration file.
 
 CONFIGURATION:
 - Requires a 'nexical.yaml' file in the project root.
-- If the file or specific sections are missing, the CLI will prompt you to run an interactive setup 
-  and save the configuration for future uses.
+- Supports definition of multiple applications under 'deploy.apps'.
 - Supports loading environment variables from a .env file in the project root.
-
-PROVIDERS:
-- Backend: Railway, etc.
-- Frontend: Cloudflare Pages, etc.
-- Repository: GitHub, GitLab, etc.
 
 PROCESS:
 1. Loads environment variables from '.env'.
 2. Loads configuration from 'nexical.yaml'.
-3. Provisions resources via the selected providers.
+3. Provisions resources for each application.
 4. Configures the repository (secrets/variables) for CI/CD.
-5. Generates CI/CD workflow files.`;
+5. Generates CI/CD workflow files for each application.`;
 
   static args = {
     options: [
-      {
-        name: '--backend <provider>',
-        description: 'Override backend provider',
-      },
-      {
-        name: '--frontend <provider>',
-        description: 'Override frontend provider',
-      },
-      {
-        name: '--repo <provider>',
-        description: 'Override repositroy provider',
-      },
       {
         name: '--env <environment>',
         description: 'Deployment environment (e.g. production, staging)',
@@ -53,6 +35,19 @@ PROCESS:
         description: 'Simulate the deployment process',
         default: false,
       },
+      {
+        name: '--apps <apps>',
+        description: 'Comma separated list of applications to deploy',
+      },
+      {
+        name: '--manual',
+        description: 'Perform a direct build and deployment from the local machine',
+        default: false,
+      },
+      {
+        name: '--repo <provider>',
+        description: 'Repository provider to use (e.g. github, gitlab)',
+      },
     ],
   };
 
@@ -60,7 +55,7 @@ PROCESS:
     this.info('Starting Nexical Deployment...');
 
     // Load environment variables from .env
-    dotenv.config({ path: path.join(process.cwd(), '.env') });
+    dotenv.config({ path: path.join(process.cwd(), '.env'), quiet: true });
 
     const configManager = new ConfigManager(process.cwd());
     const config = await configManager.load();
@@ -70,21 +65,35 @@ PROCESS:
     await registry.loadCoreProviders();
     await registry.loadLocalProviders(process.cwd());
 
-    // Resolve providers (CLI flags > Config > Error)
-    const backendProviderName =
-      (options.backend as string | undefined) || config.deploy?.backend?.provider;
-    if (!backendProviderName) {
-      this.error(
-        "Backend provider not specified. Use --backend flag or configure 'deploy.backend.provider' in nexical.yaml.",
-      );
+    // Resolve Applications
+    const appsMap = config.deploy?.apps || {};
+    let apps: AppConfig[] = Object.entries(appsMap).map(([name, appConfig]) => {
+      const app: AppConfig = {
+        ...(appConfig as unknown as AppConfig),
+        name,
+      };
+      return app;
+    });
+
+    // Filter applications if --apps is specified
+    const selectedApps = options.apps as string | undefined;
+    if (selectedApps) {
+      const appNames = selectedApps.split(',').map((s) => s.trim());
+      const filteredApps = apps.filter((app) => appNames.includes(app.name));
+
+      // Validation: Ensure all specified apps exist
+      const missingApps = appNames.filter((name) => !apps.find((app) => app.name === name));
+      if (missingApps.length > 0) {
+        this.error(
+          `The following applications were not found in nexical.yaml: ${missingApps.join(', ')}`,
+        );
+      }
+
+      apps = filteredApps;
     }
 
-    const frontendProviderName =
-      (options.frontend as string | undefined) || config.deploy?.frontend?.provider;
-    if (!frontendProviderName) {
-      this.error(
-        "Frontend provider not specified. Use --frontend flag or configure 'deploy.frontend.provider' in nexical.yaml.",
-      );
+    if (apps.length === 0) {
+      this.error('No applications found in nexical.yaml. Please configure [deploy.apps].');
     }
 
     const repoProviderName =
@@ -95,13 +104,7 @@ PROCESS:
       );
     }
 
-    const backendProvider = registry.getDeploymentProvider(backendProviderName!);
-    const frontendProvider = registry.getDeploymentProvider(frontendProviderName!);
     const repoProvider = registry.getRepositoryProvider(repoProviderName!);
-
-    if (!backendProvider) throw new Error(`Backend provider '${backendProviderName}' not found.`);
-    if (!frontendProvider)
-      throw new Error(`Frontend provider '${frontendProviderName}' not found.`);
     if (!repoProvider) throw new Error(`Repository provider '${repoProviderName}' not found.`);
 
     const context: DeploymentContext = {
@@ -110,65 +113,82 @@ PROCESS:
       options,
     };
 
-    // Provision
-    this.info(`Provisioning Backend with ${backendProvider.name}...`);
-    await backendProvider.provision(context);
+    const activeApps: { provider: HostingProvider; app: AppConfig }[] = [];
+    const secrets: Record<string, string> = {};
+    const variables: Record<string, string> = {};
 
-    this.info(`Provisioning Frontend with ${frontendProvider.name}...`);
-    await frontendProvider.provision(context);
+    this.info(`Deploying ${apps.length} applications in parallel...`);
+
+    const isManual = !!options.manual;
+
+    await Promise.all(
+      apps.map(async (app) => {
+        this.info(`Processing application: ${app.name}...`);
+        const provider = registry.getHostingProvider(app.provider);
+        if (!provider) {
+          this.error(`Provider '${app.provider}' not found for application '${app.name}'.`);
+          return;
+        }
+
+        // Build
+        if (isManual && app.buildCommand) {
+          this.info(`  Building ${app.name} locally...`);
+          if (context.options.dryRun) {
+            this.info(`  [Dry Run] Would run build: ${app.buildCommand}`);
+          } else {
+            try {
+              const { execAsync } = await import('../deploy/utils');
+              await execAsync(app.buildCommand);
+            } catch (e: unknown) {
+              const message = e instanceof Error ? e.message : String(e);
+              this.error(`Build failed for ${app.name}: ${message}`);
+              return;
+            }
+          }
+        }
+
+        // Provision
+        this.info(`  Provisioning ${app.name} with ${provider.name}...`);
+        await provider.provision(context, app);
+
+        // Direct Deploy
+        if (isManual && provider.deploy) {
+          this.info(`  Performing direct deployment for ${app.name}...`);
+          await provider.deploy(context, app);
+        }
+
+        // Collect secrets
+        this.info(`  Resolving secrets for ${app.name} from ${provider.name}...`);
+        try {
+          const appSecrets = await provider.getSecrets(context, app);
+          Object.assign(secrets, appSecrets);
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          this.error(`Failed to resolve secrets for ${app.name} (${provider.name}): ${message}`);
+        }
+
+        // Collect variables
+        this.info(`  Resolving variables for ${app.name} from ${provider.name}...`);
+        try {
+          const appVars = await provider.getVariables(context, app);
+          Object.assign(variables, appVars);
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          this.error(`Failed to resolve variables for ${app.name} (${provider.name}): ${message}`);
+        }
+
+        activeApps.push({ provider, app });
+      }),
+    );
 
     // Configure Repo
     this.info(`Configuring Repository with ${repoProvider.name}...`);
-
-    const secrets: Record<string, string> = {};
-
-    // Collect secrets from Backend Provider
-    this.info(`Resolving secrets from ${backendProvider.name}...`);
-    try {
-      const backendSecrets = await backendProvider.getSecrets(context);
-      Object.assign(secrets, backendSecrets);
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      this.error(`Failed to resolve secrets for ${backendProvider.name}: ${message}`);
-    }
-
-    // Collect secrets from Frontend Provider
-    this.info(`Resolving secrets from ${frontendProvider.name}...`);
-    try {
-      const frontendSecrets = await frontendProvider.getSecrets(context);
-      Object.assign(secrets, frontendSecrets);
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      this.error(`Failed to resolve secrets for ${frontendProvider.name}: ${message}`);
-    }
-
     await repoProvider.configureSecrets(context, secrets);
-
-    const variables: Record<string, string> = {};
-
-    // Collect variables from Backend Provider
-    try {
-      const backendVars = await backendProvider.getVariables(context);
-      Object.assign(variables, backendVars);
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      this.error(`Failed to resolve variables for ${backendProvider.name}: ${message}`);
-    }
-
-    // Collect variables from Frontend Provider
-    try {
-      const frontendVars = await frontendProvider.getVariables(context);
-      Object.assign(variables, frontendVars);
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      this.error(`Failed to resolve variables for ${frontendProvider.name}: ${message}`);
-    }
-
     await repoProvider.configureVariables(context, variables);
 
     // Generate Workflows
     this.info('Generating CI/CD Workflows...');
-    await repoProvider.generateWorkflow(context, [backendProvider, frontendProvider]);
+    await repoProvider.generateWorkflow(context, activeApps);
 
     this.success('Deployment configuration complete!');
   }

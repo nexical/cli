@@ -1,22 +1,22 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { logger } from '@nexical/cli-core';
-import { DeploymentProvider, RepositoryProvider } from './types';
+import { HostingProvider, RepositoryProvider } from './types';
 
 export class ProviderRegistry {
-  private deploymentProviders: Map<string, DeploymentProvider> = new Map();
+  private hostingProviders: Map<string, HostingProvider> = new Map();
   private repositoryProviders: Map<string, RepositoryProvider> = new Map();
 
-  registerDeploymentProvider(provider: DeploymentProvider) {
-    this.deploymentProviders.set(provider.name, provider);
+  registerHostingProvider(provider: HostingProvider) {
+    this.hostingProviders.set(provider.name, provider);
   }
 
   registerRepositoryProvider(provider: RepositoryProvider) {
     this.repositoryProviders.set(provider.name, provider);
   }
 
-  getDeploymentProvider(name: string): DeploymentProvider | undefined {
-    return this.deploymentProviders.get(name);
+  getHostingProvider(name: string): HostingProvider | undefined {
+    return this.hostingProviders.get(name);
   }
 
   getRepositoryProvider(name: string): RepositoryProvider | undefined {
@@ -50,8 +50,8 @@ export class ProviderRegistry {
 
     if (provider) {
       if (typeof provider.provision === 'function' && typeof provider.getCIConfig === 'function') {
-        logger.info(`[Registry] Loaded ${source} deployment provider: ${provider.name}`);
-        this.registerDeploymentProvider(provider as DeploymentProvider);
+        logger.info(`[Registry] Loaded ${source} hosting provider: ${provider.name}`);
+        this.registerHostingProvider(provider as HostingProvider);
       } else if (
         typeof provider.configureSecrets === 'function' &&
         typeof provider.generateWorkflow === 'function'

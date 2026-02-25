@@ -2,11 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
 import { logger } from '@nexical/cli-core';
-import { RepositoryProvider, DeploymentContext, DeploymentProvider } from '../types';
+import { RepositoryProvider, DeploymentContext, HostingProvider, AppConfig } from '../types';
 import { execAsync } from '../utils';
+import { TemplateManager } from '../template-manager';
 
 export class GitHubProvider implements RepositoryProvider {
   name = 'github';
+  private templateManager = new TemplateManager();
 
   async configureSecrets(
     context: DeploymentContext,
@@ -38,58 +40,48 @@ export class GitHubProvider implements RepositoryProvider {
     }
   }
 
-  async generateWorkflow(context: DeploymentContext, targets: DeploymentProvider[]): Promise<void> {
+  async generateWorkflow(
+    context: DeploymentContext,
+    targets: { provider: HostingProvider; app: AppConfig }[],
+  ): Promise<void> {
     const workflowsDir = path.join(context.cwd, '.github/workflows');
     await fs.mkdir(workflowsDir, { recursive: true });
 
-    for (const target of targets) {
-      const config = target.getCIConfig('github');
+    for (const { provider, app } of targets) {
+      const config = provider.getCIConfig('github', app);
       if (!config) continue;
 
-      const filename = `deploy-${target.type}.yml`;
+      const filename = `deploy-${app.name}.yml`;
       const filepath = path.join(workflowsDir, filename);
 
-      const workflow: Record<string, unknown> = {
-        name: `Deploy ${target.type === 'backend' ? 'Backend' : 'Frontend'} to ${target.name}`,
-        on: {
-          push: { branches: ['main'] },
-          workflow_dispatch: {},
-        },
-        jobs: {
-          deploy: {
-            'runs-on': 'ubuntu-latest',
-            permissions: {
-              contents: 'read',
-              deployments: 'write',
-            },
-            steps: [
-              {
-                name: 'Checkout',
-                uses: 'actions/checkout@v4',
-                with: { submodules: 'recursive' },
-              },
-              {
-                name: 'Setup Node',
-                uses: 'actions/setup-node@v4',
-                with: { 'node-version': 20, cache: 'npm' },
-              },
-              {
-                name: 'Install Dependencies',
-                run: 'npm ci',
-              },
-            ],
-          },
-        },
-      };
+      const workflow = await this.templateManager.loadWorkflow('github-workflow', {
+        APP_NAME: app.name,
+        PROVIDER_NAME: provider.name,
+      });
+
+      // Update push trigger if paths are specified
+      if (app.paths && app.paths.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const workflowAny = workflow as any;
+        if (typeof workflowAny.on === 'string') {
+          workflowAny.on = {
+            push: { branches: [workflowAny.on] },
+          };
+        }
+        if (!workflowAny.on.push) {
+          workflowAny.on.push = { branches: ['main'] };
+        }
+        workflowAny.on.push.paths = app.paths;
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const steps = (workflow as any).jobs.deploy.steps;
 
-      // Build (if frontend)
-      if (target.type === 'frontend') {
+      // Build (if applicable)
+      if (app.buildCommand) {
         steps.push({
-          name: 'Build Frontend',
-          run: 'npm run build --workspace=@app/frontend',
+          name: `Build ${app.name}`,
+          run: app.buildCommand,
         });
       }
 
@@ -97,7 +89,7 @@ export class GitHubProvider implements RepositoryProvider {
       if (config.installSteps) {
         for (const step of config.installSteps) {
           steps.push({
-            name: `Install ${target.name} CLI`,
+            name: `Install ${provider.name} CLI`,
             run: step,
           });
         }
@@ -107,13 +99,18 @@ export class GitHubProvider implements RepositoryProvider {
       if (config.deploySteps) {
         for (const step of config.deploySteps) {
           const deployStep: Record<string, unknown> = {
-            name: `Deploy to ${target.name}`,
+            name: `Deploy ${app.name} to ${provider.name}`,
             run: step,
-            'working-directory': target.type === 'backend' ? 'apps/backend' : 'apps/frontend',
+            'working-directory': app.target || '.',
           };
 
-          if (config.secrets && config.secrets.length > 0) {
-            deployStep.env = config.secrets.reduce((acc: Record<string, string>, secret) => {
+          const allSecrets = [...(config.secrets || [])];
+          if (app.secrets) {
+            allSecrets.push(...Object.keys(app.secrets));
+          }
+
+          if (allSecrets.length > 0) {
+            deployStep.env = allSecrets.reduce((acc: Record<string, string>, secret) => {
               acc[secret] = `\${{ secrets.${secret} }}`;
               return acc;
             }, {});
@@ -128,7 +125,7 @@ export class GitHubProvider implements RepositoryProvider {
         steps.push(config.githubActionStep);
       }
 
-      await fs.writeFile(filepath, YAML.stringify(workflow), 'utf-8');
+      await fs.writeFile(filepath, YAML.stringify(workflow, { lineWidth: 0 }), 'utf-8');
       logger.info(`Generated workflow: ${filepath}`);
     }
   }

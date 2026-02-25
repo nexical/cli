@@ -1,52 +1,54 @@
 import path from 'node:path';
 import { logger } from '@nexical/cli-core';
-import { DeploymentProvider, DeploymentContext, CIConfig } from '../types';
+import { HostingProvider, DeploymentContext, CIConfig, AppConfig } from '../types';
 import { execAsync } from '../utils';
 
-export class RailwayProvider implements DeploymentProvider {
-  name = 'railway';
-  type = 'backend' as const;
+export interface RailwayConfig {
+  token?: string;
+  services?: {
+    type: string;
+    name: string;
+    [key: string]: unknown;
+  }[];
+}
 
-  async provision(context: DeploymentContext): Promise<void> {
-    const backendDir = path.join(context.cwd, 'apps/backend');
-    const env = (context.options.env as string) || 'production';
-    const baseProjectName = context.config.deploy?.backend?.projectName;
+export class RailwayProvider implements HostingProvider {
+  name = 'railway';
+
+  async provision(context: DeploymentContext, app: AppConfig): Promise<void> {
+    const targetDir = app.target ? path.resolve(context.cwd, app.target) : context.cwd;
+    const baseProjectName = app.projectName;
 
     if (!baseProjectName) {
       throw new Error(
-        "Railway project name not found in nexical.yaml. Please configure 'deploy.backend.projectName'.",
+        `Railway project name not found for ${app.name}. Please configure 'projectName'.`,
       );
     }
 
-    const railwayName = env === 'production' ? baseProjectName : `${baseProjectName}-${env}`;
+    const projectName = baseProjectName;
 
-    logger.info('Configuring Railway...');
+    logger.info(`Configuring Railway project "${projectName}" for ${app.name}...`);
 
     if (context.options.dryRun) {
-      logger.info(`[Dry Run] Would check Railway status and init project "${railwayName}".`);
+      logger.info(`[Dry Run] Would check Railway status and init project "${projectName}".`);
       return;
     }
 
     try {
-      // We consciously DO NOT pass any RAILWAY_API_TOKEN to the subprocess.
-      // The user may have an invalid token in their .env file (which process.env inherits).
-      // We want to force the Railway CLI to use the locally logged-in user's credentials.
-      const env = { ...process.env };
-      delete env.RAILWAY_API_TOKEN;
-      delete env.RAILWAY_TOKEN;
+      const processEnv = { ...process.env };
+      delete processEnv.RAILWAY_API_TOKEN;
+      delete processEnv.RAILWAY_TOKEN;
 
       logger.info('Using local Railway CLI credentials (environment variables stripped).');
 
-      // Check status to see if we are linked to a project
       try {
-        await execAsync('railway status', { cwd: backendDir, env });
+        await execAsync('railway status', { cwd: targetDir, env: processEnv });
       } catch (error: unknown) {
         const errMsg = error instanceof Error ? error.message : String(error);
         const stderr = (error as { stderr?: string }).stderr || '';
         const stdout = (error as { stdout?: string }).stdout || '';
         const fullError = `${errMsg} ${stderr} ${stdout}`;
 
-        // If status fails, likely project doesn't exist locally or we aren't linked.
         if (
           fullError.includes('Project not found') ||
           fullError.includes('No project') ||
@@ -54,38 +56,60 @@ export class RailwayProvider implements DeploymentProvider {
         ) {
           if (fullError.includes('Project is deleted')) {
             logger.info('[Railway] Project is deleted. Unlinking...');
-            // If it's deleted, we might need to unlink first to clean up local config
-            await execAsync('railway unlink', { cwd: backendDir }).catch(() => {});
+            await execAsync('railway unlink', { cwd: targetDir }).catch(() => {});
           }
-          const initCmd = `railway init --name ${railwayName}`;
+          const initCmd = `railway init --name ${projectName}`;
           logger.info(`No active Railway project linked. Initializing with: ${initCmd}`);
-          await execAsync(initCmd, { cwd: backendDir, env });
+          await execAsync(initCmd, { cwd: targetDir, env: processEnv });
         } else if (
           fullError.includes('Invalid RAILWAY_API_TOKEN') ||
           fullError.includes('Unauthorized')
         ) {
           throw new Error('Railway authentication failed during status check.');
         } else {
-          // Some other error (e.g. timeout), warn and try to proceed
           logger.warn(`Railway status check failed: ${errMsg}. Proceeding.`);
         }
       }
 
-      logger.info(`Adding PostgreSQL service if missing for "${railwayName}"...`);
-      const { stdout: status } = await execAsync('railway status', { cwd: backendDir, env }).catch(
-        () => ({ stdout: '' }),
-      );
-      if (!status.includes('postgres')) {
-        try {
-          await execAsync('railway add --database postgres', { cwd: backendDir, env });
-        } catch {
-          logger.warn('Failed to auto-add PostgreSQL.');
+      const rwConfig = (app.railway as RailwayConfig) || {};
+      const services = rwConfig.services || [];
+      if (services.length > 0) {
+        logger.info(`Provisioning ${services.length} services for project "${projectName}"...`);
+
+        // Re-check status once to see what's already there
+        const statusData = await execAsync('railway status', {
+          cwd: targetDir,
+          env: processEnv,
+        }).catch(() => ({ stdout: '' }));
+        const status = (statusData as { stdout: string }).stdout || '';
+
+        for (const service of services) {
+          if (service.type === 'database') {
+            const dbName = service.name;
+            if (!status.toLowerCase().includes(dbName.toLowerCase())) {
+              logger.info(`Adding ${dbName} service to project "${projectName}"...`);
+              try {
+                await execAsync(`railway add --database ${dbName}`, {
+                  cwd: targetDir,
+                  env: processEnv,
+                });
+              } catch (err: unknown) {
+                logger.warn(
+                  `Failed to auto-add ${dbName} database: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            } else {
+              logger.info(`Service ${dbName} already present in project "${projectName}".`);
+            }
+          } else {
+            logger.warn(
+              `Service type "${service.type}" is not yet supported for automatic provisioning.`,
+            );
+          }
         }
       }
     } catch (e: unknown) {
-      // Rethrow explicit auth errors, otherwise warn
       const errMsg = e instanceof Error ? e.message : String(e);
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const stderr = (e as any).stderr || '';
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,9 +127,9 @@ export class RailwayProvider implements DeploymentProvider {
     }
   }
 
-  private resolveToken(context: DeploymentContext): string | undefined {
-    const options = context.config.deploy?.backend?.options || {};
-    const tokenEnvVar = typeof options.tokenEnvVar === 'string' ? options.tokenEnvVar : undefined;
+  private resolveToken(context: DeploymentContext, app: AppConfig): string | undefined {
+    const rwConfig = (app.railway as RailwayConfig) || {};
+    const tokenEnvVar = rwConfig.token;
     return (
       process.env.RAILWAY_API_TOKEN?.trim() ||
       (tokenEnvVar ? process.env[tokenEnvVar]?.trim() : undefined) ||
@@ -113,46 +137,91 @@ export class RailwayProvider implements DeploymentProvider {
     );
   }
 
-  async getSecrets(context: DeploymentContext): Promise<Record<string, string>> {
-    const token = this.resolveToken(context);
+  async deploy(context: DeploymentContext, app: AppConfig): Promise<void> {
+    const targetDir = app.target ? path.resolve(context.cwd, app.target) : context.cwd;
+
+    logger.info(`Deploying ${app.name} to Railway...`);
+
+    if (context.options.dryRun) {
+      logger.info(`[Dry Run] Would run "railway up" in ${targetDir}.`);
+      return;
+    }
+
+    const token = this.resolveToken(context, app);
+    const processEnv = { ...process.env };
+    if (token) {
+      processEnv.RAILWAY_TOKEN = token;
+    }
+
+    await execAsync('railway up --detach', {
+      cwd: targetDir,
+      env: processEnv,
+    });
+
+    logger.success(`Successfully deployed ${app.name} to Railway.`);
+  }
+
+  async getSecrets(context: DeploymentContext, app: AppConfig): Promise<Record<string, string>> {
+    const token = this.resolveToken(context, app);
     const secrets: Record<string, string> = {};
 
     if (!token) {
-      // Strict check: Error if token is missing
       throw new Error(
-        `Railway Token not found. Please provide it via:\n` +
+        `Railway Token not found for ${app.name}. Please provide it via:\n` +
           `1. Setting RAILWAY_API_TOKEN in .env (Recommended)\n` +
-          `2. Configuring 'deploy.backend.options.tokenEnvVar' in nexical.yaml\n` +
+          `2. Configuring 'railway.token' and setting that env var in .env\n` +
           `3. Setting RAILWAY_TOKEN in .env`,
       );
     }
 
     secrets['RAILWAY_API_TOKEN'] = token;
+
+    // Custom mapped secrets
+    if (app.secrets) {
+      for (const [key, envVar] of Object.entries(app.secrets)) {
+        const value = process.env[envVar];
+        if (!value) {
+          throw new Error(`Custom secret '${key}' mapping failed: Env var '${envVar}' not found.`);
+        }
+        secrets[key] = value;
+      }
+    }
+
     return secrets;
   }
 
-  async getVariables(context: DeploymentContext): Promise<Record<string, string>> {
+  async getVariables(context: DeploymentContext, app: AppConfig): Promise<Record<string, string>> {
     const env = (context.options.env as string) || 'production';
-    const baseProjectName = context.config.deploy?.backend?.projectName;
+    const baseProjectName = app.projectName;
 
     if (!baseProjectName) {
-      throw new Error(
-        "Railway project name not found in nexical.yaml. Please configure 'deploy.backend.projectName'.",
-      );
+      throw new Error(`Railway project name not found for ${app.name}.`);
     }
 
-    const projectName = env === 'production' ? baseProjectName : `${baseProjectName}-${env}`;
-    return {
-      RAILWAY_PROJECT_NAME: projectName,
+    const result: Record<string, string> = {
+      RAILWAY_PROJECT_NAME: baseProjectName,
+      RAILWAY_ENVIRONMENT: env,
     };
+
+    // Custom mapped variables
+    if (app.env) {
+      for (const [key, value] of Object.entries(app.env)) {
+        const resolvedValue = process.env[value] || value;
+        result[key] = resolvedValue;
+      }
+    }
+
+    return result;
   }
 
-  getCIConfig(): CIConfig {
+  getCIConfig(repoType: 'github' | 'gitlab', app: AppConfig): CIConfig {
     return {
       secrets: ['RAILWAY_API_TOKEN'],
-      variables: [],
+      variables: ['RAILWAY_ENVIRONMENT'],
       installSteps: ['npm install -g @railway/cli'],
-      deploySteps: ['railway up --detach --project=${{ vars.RAILWAY_PROJECT_NAME }}'],
+      deploySteps: [
+        `railway up --detach --project=\${{ vars.RAILWAY_PROJECT_NAME }} --environment=\${{ vars.RAILWAY_ENVIRONMENT }}`,
+      ],
     };
   }
 }

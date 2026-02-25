@@ -12,6 +12,9 @@ export default <Options>{
   splitting: true,
   outDir: 'dist',
   shims: true, // Enable shims (including __require shim for legacy deps)
+  loader: {
+    '.yaml': 'copy',
+  },
   banner: {
     js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',
   },

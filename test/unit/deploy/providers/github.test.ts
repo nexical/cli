@@ -1,20 +1,23 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { GitHubProvider } from '../../../../src/deploy/providers/github.js';
 import { execAsync } from '../../../../src/deploy/utils.js';
 import { logger } from '@nexical/cli-core';
 import fs from 'node:fs/promises';
+import { DeploymentContext } from '../../../../src/deploy/types.js';
 
 vi.mock('node:fs/promises');
 vi.mock('../../../../src/deploy/utils.js');
 vi.mock('@nexical/cli-core', () => ({
   logger: {
     info: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
   },
 }));
 
 describe('GitHubProvider', () => {
   let provider: GitHubProvider;
-  let mockContext: any;
+  let mockContext: DeploymentContext;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -22,12 +25,17 @@ describe('GitHubProvider', () => {
     mockContext = {
       cwd: '/mock',
       options: {},
-      config: { deploy: { backend: {}, frontend: {} } },
-    } as unknown as any;
-    (execAsync as unknown as { mockResolvedValue: (val: unknown) => void }).mockResolvedValue({
+      config: { deploy: { repository: { provider: 'github' }, apps: {} } },
+    } as unknown as DeploymentContext;
+    (execAsync as Mock).mockResolvedValue({
       stdout: '',
       stderr: '',
     });
+    (fs.readFile as Mock).mockResolvedValue(
+      'name: ${APP_NAME}\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    steps: []',
+    );
+    (fs.mkdir as Mock).mockResolvedValue(undefined);
+    (fs.writeFile as Mock).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -76,64 +84,52 @@ describe('GitHubProvider', () => {
     it('should generate workflow file', async () => {
       const targets = [
         {
-          type: 'frontend',
-          name: 'cf',
-          getCIConfig: () => ({
-            installSteps: ['run install'],
-            deploySteps: ['run deploy'],
-            secrets: ['SEC'],
-            githubActionStep: { name: 'Action' },
-          }),
-        },
-        {
-          type: 'backend',
-          name: 'rw',
-          getCIConfig: () => ({
-            deploySteps: ['run backend'],
-          }),
+          provider: {
+            name: 'railway',
+            getCIConfig: () => ({
+              installSteps: ['run install'],
+              deploySteps: ['run deploy'],
+              secrets: ['SEC'],
+              githubActionStep: { name: 'Action' },
+            }),
+          },
+          app: { name: 'rw', provider: 'railway' },
         },
       ] as unknown as any;
 
       await provider.generateWorkflow(mockContext, targets);
 
-      expect(fs.mkdir).toHaveBeenCalled();
-      expect(fs.writeFile).toHaveBeenCalledTimes(2);
+      expect(fs.writeFile).toHaveBeenCalled();
+      const content = (fs.writeFile as Mock).mock.calls[0][1];
+      expect(content).toContain('name: Deploy rw to railway');
     });
 
-    it('should skip if no config', async () => {
+    it('should support paths trigger', async () => {
       const targets = [
         {
-          type: 'frontend',
-          getCIConfig: () => null,
+          provider: {
+            name: 'frontend',
+            getCIConfig: () => ({}),
+          },
+          app: {
+            name: 'fe',
+            provider: 'cloudflare',
+            paths: ['apps/frontend/**'],
+          },
         },
       ] as unknown as any;
+
       await provider.generateWorkflow(mockContext, targets);
-      expect(fs.writeFile).not.toHaveBeenCalled();
+
+      expect(fs.writeFile).toHaveBeenCalled();
+      const content = (fs.writeFile as Mock).mock.calls[0][1];
+      expect(content).toContain('paths:');
+      expect(content).toContain('- apps/frontend/**');
     });
 
-    it('should handle no targets', async () => {
+    it('should skip if no targets provided', async () => {
       await provider.generateWorkflow(mockContext, []);
       expect(fs.writeFile).not.toHaveBeenCalled();
-    });
-
-    it('should handle target with no deploy steps', async () => {
-      const targets = [
-        {
-          type: 'backend',
-          name: 'test',
-          getCIConfig: () => ({
-            // explicit undefined deploySteps
-            deploySteps: undefined,
-            secrets: [],
-          }),
-        },
-      ] as unknown as any;
-
-      await provider.generateWorkflow(mockContext, targets);
-      expect(fs.writeFile).toHaveBeenCalled();
-      // Verify content doesn't crash
-      const content = (fs.writeFile as unknown as { mock: { calls: any[][] } }).mock.calls[0][1];
-      expect(content).toContain('Deploy Backend to test');
     });
   });
 });

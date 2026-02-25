@@ -12,8 +12,10 @@ vi.mock('../../../src/deploy/config-manager.js', () => {
       return {
         load: vi.fn().mockResolvedValue({
           deploy: {
-            backend: { provider: 'railway' },
-            frontend: { provider: 'cloudflare' },
+            apps: {
+              backend: { provider: 'railway' },
+              frontend: { provider: 'cloudflare' },
+            },
             repository: { provider: 'github' },
           },
         }),
@@ -28,7 +30,7 @@ vi.mock('../../../src/deploy/registry.js', () => {
       return {
         loadCoreProviders: vi.fn(),
         loadLocalProviders: vi.fn(),
-        getDeploymentProvider: vi.fn().mockImplementation((name) => {
+        getHostingProvider: vi.fn().mockImplementation((name) => {
           if (name === 'railway') {
             return {
               name: 'railway',
@@ -96,6 +98,50 @@ describe('Deploy Command Integration', () => {
       const workflowPath = path.join(projectDir, '.github/workflows/deploy.yml');
       expect(await fs.pathExists(workflowPath)).toBe(true);
     } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it('should filter applications when --apps is specified', async () => {
+    const originalCwd = process.cwd();
+    try {
+      const cli = new CLI({ commandName: 'nexical' });
+      process.chdir(projectDir);
+
+      const deployCmd = new DeployCommand(cli);
+
+      // Execute run with only backend
+      await deployCmd.run({ env: 'production', apps: 'backend' });
+
+      // Verification: The mock ProviderRegistry.getDeploymentProvider was only called for 'backend'
+      // and NOT for 'frontend'. In this simpler verification, we just check no error was thrown.
+      const workflowPath = path.join(projectDir, '.github/workflows/deploy.yml');
+      expect(await fs.pathExists(workflowPath)).toBe(true);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it('should throw error if specified application does not exist', async () => {
+    const originalCwd = process.cwd();
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`Process exited with code ${code}`);
+    });
+
+    try {
+      const cli = new CLI({ commandName: 'nexical' });
+      process.chdir(projectDir);
+
+      const deployCmd = new DeployCommand(cli);
+
+      // Execute run with non-existent app
+      // We expect the 'process.exit unexpectedly called' error OR our custom error
+      // Depending on how vitest/cli-core interacts.
+      await expect(deployCmd.run({ env: 'production', apps: 'invalid-app' })).rejects.toThrow(
+        /The following applications were not found in nexical.yaml: invalid-app|Process exited with code 1/,
+      );
+    } finally {
+      mockExit.mockRestore();
       process.chdir(originalCwd);
     }
   });

@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
 import { NexicalConfig } from './types';
+import { DeploymentSchema } from './schema';
+import { logger } from '@nexical/cli-core';
 
 export class ConfigManager {
   private configPath: string;
@@ -13,7 +15,18 @@ export class ConfigManager {
   async load(): Promise<NexicalConfig> {
     try {
       const content = await fs.readFile(this.configPath, 'utf-8');
-      return YAML.parse(content) as NexicalConfig;
+      const parsed = YAML.parse(content);
+
+      const result = DeploymentSchema.safeParse(parsed);
+      if (!result.success) {
+        logger.error('Invalid nexical.yaml configuration:');
+        result.error.issues.forEach((err) => {
+          logger.error(`  - ${err.path.join('.')}: ${err.message}`);
+        });
+        throw new Error('Configuration validation failed.');
+      }
+
+      return result.data as NexicalConfig;
     } catch (error: unknown) {
       if (
         error &&

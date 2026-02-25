@@ -78,238 +78,142 @@ npm run build
 
 ```bash
 # Run the built CLI
-npx nexical <command> [options]
+nexical <command> [options]
 
 # Example: Initialize a new project
-npx nexical init my-new-project
+nexical init my-new-project
 
 # Get help
-npx nexical help
+nexical help
 
 # Get help for a specific command
-npx nexical help init
-npx nexical help module add
+nexical help init
+nexical help module add
 ```
 
 ### Command Reference
 
 #### `init`
 
-Initializes a new Nexical project by cloning a starter repository, setting up dependencies, and preparing a fresh git history.
+Initializes a new Nexical project. It clones a starter repository, sets up submodules, installs dependencies, and resets the Git history to provide a clean starting point.
 
 **Usage:**
 
 ```bash
-npx nexical init <directory> [options]
+nexical init <directory> [options]
 ```
-
-**Arguments:**
-
-- `directory` (Required): The directory to initialize the project in. If the directory does not exist, it will be created. If it does exist, it must be empty.
 
 **Options:**
 
-- `--repo <url>` (Default: `https://github.com/nexical/app-core`): The URL of the starter repository to clone.
-  - Supports standard Git URLs (e.g., `https://github.com/user/repo.git`).
-  - Supports GitHub short syntax `gh@owner/repo` (e.g., `gh@nexical/app-core`).
-
-**What it does:**
-
-1.  **Clones** the specified starter repository (recursively, including submodules) into the target directory.
-2.  **Updates** all submodules to their latest `main` branch.
-3.  **Installs** dependencies using `npm install`.
-4.  **Resets** Git history:
-    - Creates an orphan branch (`new-main`).
-    - Commits all files as an "Initial commit".
-    - Deletes the old history (removes `main`/`master`).
-    - Renames the branch to `main`.
-    - Removes the `origin` remote to prevent accidental pushes to the starter repo.
-
-**Output:**
-
-- A ready-to-use Nexical project in the specified directory, with fresh git history and installed dependencies.
+- `--repo <url>`: The Git repository URL of the starter template (Default: `https://github.com/nexical/app-core`).
 
 ---
 
-#### `dev`
+#### `deploy`
 
-Starts the development server in ephemeral mode. It constructs a temporary build environment in `site` and runs the Astro dev server with Hot Module Replacement (HMR).
+Orchestrates the deployment of your applications by interacting with cloud providers and configuring your repository's CI/CD environment.
 
 **Usage:**
 
 ```bash
-npx nexical dev
+nexical deploy [options]
 ```
 
-**What it does:** 2. **Starts** the Astro development server (accessible at `http://localhost:4321` by default). 3. **Watches** for changes in your project and updates the ephemeral build automatically.
+**Options:**
+
+- `--env <environment>`: Deployment environment (e.g., `production`, `staging`). Defaults to `production`.
+- `--apps <apps>`: Comma separated list of applications to deploy (e.g., `backend,frontend`). If omitted, all applications are deployed.
+- `--dry-run`: Simulate the deployment process without making API calls to providers or modifying repository secrets.
+
+**Process:**
+
+1.  **Load Config**: Reads `nexical.yaml` and validates the schema.
+2.  **Provision**: Concurrently calls providers to ensure resources exist.
+3.  **Sync Secrets**: Collects necessary API tokens and credentials, syncing them to the repository (e.g., GitHub Secrets).
+4.  **Generate Workflows**: Renders CI/CD workflow files into `.github/workflows/` using standard templates.
+
+**Configuration (`nexical.yaml`):**
+
+```yaml
+deploy:
+  repository:
+    provider: github
+  apps:
+    backend:
+      provider: railway
+      projectName: my-api
+      target: apps/backend
+      artifactPath: dist
+      buildCommand: npm run build --workspace=@app/backend
+      secrets:
+        DB_PASSWORD: DATABASE_PASSWORD_ENV # Maps provider secret to local ENV var
+      env:
+        NODE_ENV: production # Literal value
+    frontend:
+      provider: cloudflare
+      projectName: my-web
+      target: apps/frontend
+      artifactPath: dist
+      buildCommand: npm run build --workspace=@app/frontend
+```
 
 ---
 
-#### `build`
+#### `prompt`
 
-Compiles the project for production. It assembles the final site structure in `site` and generates static assets.
+Packages the project context using `repomix` and runs AI-powered analysis or generation.
 
 **Usage:**
 
 ```bash
-npx nexical build
+nexical prompt [options]
 ```
 
-**What it does:**
+**Options:**
 
-1.  **Cleans** the `site` directory to ensure a fresh build.
-2.  **Copies** all necessary source files (`src/`, `modules`, `src/content`, `public`) into `site`.
-3.  **Runs** `astro build` to generate the production output in `site/dist`.
-
-**Output:**
-
-- A production-ready static site in `site/dist`.
+- `--output <path>`: Path to save the packed context file.
+- `--config <path>`: Custom configuration for the prompt runner.
 
 ---
 
-#### `preview`
+#### `setup`
 
-Previews the locally built production site. This is useful for verifying the output of `nexical build` before deploying.
+Prepares the local development environment, ensuring all necessary tools and configurations are in place.
 
 **Usage:**
 
 ```bash
-npx nexical preview
+nexical setup
 ```
-
-**Prerequisites:**
-
-- You must run `nexical build` first.
-
-**What it does:**
-
-- Starts a local web server serving the static files from `site/dist`.
-
----
-
-#### `clean`
-
-Removes generated build artifacts and temporary directories to ensure a clean state.
-
-**Usage:**
-
-```bash
-npx nexical clean
-```
-
-**What it does:**
-
-- Deletes `site`, `dist`, and `node_modules/.vite`.
 
 ---
 
 #### `run`
 
-Executes a script within the Nexical environment context. This handles path resolution and environment variable setup for you.
+Executes a command or script within the Nexical project context, handling environment variables and path resolution.
 
 **Usage:**
 
 ```bash
-npx nexical run <script> [args...]
-```
-
-**Arguments:**
-
-- `script` (Required): The name of the script to run.
-  - Can be a standard `package.json` script (e.g., `test`).
-  - Can be a module-specific script using `module:script` syntax (e.g., `blog:sync`).
-- `args` (Optional): Additional arguments to pass to the script.
-
-**Examples:**
-
-```bash
-# Run a core project script
-npx nexical run test
-
-# Run a script defined in the 'blog' module's package.json
-npx nexical run blog:sync --force
+nexical run <script> [args...]
 ```
 
 ---
 
 #### `module`
 
-Manages the modular architecture of your Nexical project. Allows you to add, remove, update, and list Git-based modules.
+Manages the modular components of your project.
 
-##### `module add`
+- **`module add <url> [name]`**: Adds a new Git-based module as a submodule.
+- **`module list`**: Displays a table of all installed modules.
+- **`module update [name]`**: Updates a specific module or all modules to their latest remote versions.
+- **`module remove <name>`**: Safely removes a module and cleans up Git metadata.
 
-Adds a new module as a Git submodule.
+---
 
-**Usage:**
+#### `dev` / `build` / `preview`
 
-```bash
-npx nexical module add <url> [name]
-```
-
-**Arguments:**
-
-- `url` (Required): The Git repository URL of the module.
-  - Supports `gh@owner/repo` shorthand.
-- `name` (Optional): The folder name for the module. Defaults to the repository name.
-
-**What it does:**
-
-1.  Adds the repository as a git submodule in `src/modules/<name>`.
-2.  Installs any new dependencies via `npm install`.
-
-##### `module list`
-
-Lists all installed modules in the project.
-
-**Usage:**
-
-```bash
-npx nexical module list
-```
-
-**Output:**
-
-- A table showing the name, version, and description of each installed module found in `src/modules`.
-
-##### `module update`
-
-Updates one or all modules to their latest remote commit.
-
-**Usage:**
-
-```bash
-npx nexical module update [name]
-```
-
-**Arguments:**
-
-- `name` (Optional): The specific module to update. If omitted, all modules are updated.
-
-**What it does:**
-
-1.  Runs `git submodule update --remote --merge` for the target(s).
-2.  Re-installs dependencies to ensure `package-lock.json` is consistent.
-
-##### `module remove`
-
-Removes an installed module and cleans up references.
-
-**Usage:**
-
-```bash
-npx nexical module remove <name>
-```
-
-**Arguments:**
-
-- `name` (Required): The name of the module to remove.
-
-**What it does:**
-
-1.  De-initializes the git submodule.
-2.  Removes the module directory from `src/modules`.
-3.  Cleans up internal git metadata (`.git/modules`).
-4.  Updates `npm` dependencies.
+Standard development cycle commands inherited from the underlying app structure (typically Astro).
 
 ---
 
@@ -318,20 +222,21 @@ npx nexical module remove <name>
 ```mermaid
 graph TD
     src-->commands
+    src-->deploy
     src-->core
     src-->utils
+    commands-->deploy.ts
     commands-->init.ts
-    core-->CLI.ts
-    core-->BaseCommand.ts
-    core-->CommandLoader.ts
-    utils-->config.ts
-    utils-->logger.ts
+    commands-->module
+    deploy-->providers
+    deploy-->schema.ts
+    deploy-->template-manager.ts
 ```
 
-- **`src/commands/`**: Contains the implementations of individual CLI commands. File names correspond to command names.
-- **`src/core/`**: The framework logic (Command loading, Base class, CLI orchestration).
-- **`src/utils/`**: Shared utilities (Logging, Configuration parsing).
-- **`test/unit/`**: Co-located unit tests. Mirrors the `src` structure.
+- **`src/commands/`**: Command implementation classes.
+- **`src/deploy/`**: Core logic for the deployment orchestration system.
+- **`src/core/`**: CLI framework (base classes, loader).
+- **`src/utils/`**: Helper utilities.
 
 ---
 
@@ -339,87 +244,37 @@ graph TD
 
 ### Prerequisites
 
-- Node.js (v18+ recommended)
-- NPM
+- Node.js (v18+)
+- NPM/PNPM
 
 ### Setup
 
-1.  **Install Dependencies**:
-
-    ```bash
-    npm install
-    ```
-
-2.  **Build in Watch Mode**:
-    ```bash
-    npm run dev
-    ```
-    This uses `tsup` to watch for changes and rebuild `dist/`.
+```bash
+npm install
+npm run build # Required to generate dist/ for local execution
+```
 
 ### Running Tests
 
-We prioritize **100% Test Coverage**. All logic branches, statements, and lines must be covered.
+We maintain strict **100% test coverage** for all logic.
 
 ```bash
-# Run all unit tests (with coverage report)
-npm run test
+npm run test           # All tests
+npm run test:unit      # Unit tests
+npm run test:integration # Integration tests
 ```
-
-Tests are written using `vitest` and are located in `test/unit/`. When submitting changes, ensure coverage remains at 100%.
-
----
-
-## Adding New Commands
-
-To create a new command, add a TypeScript file to `src/commands/`.
-
-**Example:** Create `src/commands/hello.ts`
-
-```typescript
-import { BaseCommand } from '../core/BaseCommand.js';
-
-export default class HelloCommand extends BaseCommand {
-  // 1. Define command metadata
-  static description = 'Say hello to the world';
-
-  static args = {
-    args: [{ name: 'name', required: false, description: 'User name' }],
-    options: [{ name: '--shout', description: 'Say it loud', default: false }],
-  };
-
-  // 2. Implement the run method
-  async run(options: any) {
-    const name = options.name || 'World';
-
-    if (options.shout) {
-      this.success(`HELLO ${name.toUpperCase()}!`);
-    } else {
-      this.log(`Hello ${name}`);
-    }
-  }
-}
-```
-
-**Key Requirement**: The file MUST default export a class extending `BaseCommand`.
-
-- **File Naming**:
-  - `hello.ts` -> Command: `hello`
-  - `users/create.ts` -> Command: `users create`
-  - `users/index.ts` -> Command: `users` (Parent command)
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please follow these steps:
-
-1.  Fork the repository.
-2.  Create a feature branch.
-3.  Add your changes and **ensure tests pass with 100% coverage**.
-4.  Submit a Pull Request.
+1.  Fork the repo and create a branch.
+2.  Implement changes with accompanying tests.
+3.  Ensure 100% coverage: `npm run test:unit`.
+4.  Submit a PR.
 
 ---
 
 ## License
 
-This project is licensed under the **Apache License 2.0**.
+Apache License 2.0

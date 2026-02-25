@@ -7,7 +7,7 @@
     "nexical": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && cp -r src/deploy/templates dist/",
     "dev": "tsup --watch",
     "start": "node dist/index.js",
     "test": "npm run test:unit && npm run test:integration && npm run test:e2e",
