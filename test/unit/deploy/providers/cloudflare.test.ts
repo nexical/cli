@@ -120,7 +120,7 @@ describe('CloudflareProvider', () => {
         ok: true,
         json: async () => ({
           success: true,
-          result: [{ domain: 'already-linked.com' }],
+          result: [{ name: 'already-linked.com' }],
         }),
       });
 
@@ -158,6 +158,51 @@ describe('CloudflareProvider', () => {
       );
       expect(logger.success).toHaveBeenCalledWith(
         expect.stringContaining('Linked domain new-domain.com'),
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it('should suppress "already added" error during domain linking', async () => {
+      process.env.CLOUDFLARE_API_TOKEN = 'tok';
+      process.env.CLOUDFLARE_ACCOUNT_ID = 'acc';
+
+      const mockFetch = vi.fn();
+      vi.stubGlobal('fetch', mockFetch);
+
+      // First call (GET) - return empty existing domains
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          result: [],
+        }),
+      });
+
+      // Second call (POST) - return "already added" error
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        text: async () =>
+          JSON.stringify({
+            success: false,
+            errors: [{ code: 8000018, message: 'You have already added this custom domain.' }],
+          }),
+      });
+
+      const app = {
+        name: 'frontend',
+        provider: 'cloudflare',
+        projectName: 'my-app',
+        domain: ['existing.com'],
+      } as AppConfig;
+
+      await provider.provision(mockContext, app);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Domain existing.com already linked'),
+      );
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to link domain'),
       );
 
       vi.unstubAllGlobals();

@@ -88,9 +88,9 @@ export class CloudflareProvider implements HostingProvider {
         } else {
           const listJson = (await listRes.json()) as {
             success: boolean;
-            result: { domain: string }[];
+            result: { name: string }[];
           };
-          const existingDomains = listJson.success ? listJson.result.map((d) => d.domain) : [];
+          const existingDomains = listJson.success ? listJson.result.map((d) => d.name) : [];
 
           for (const domain of domains) {
             if (existingDomains.includes(domain)) {
@@ -115,7 +115,12 @@ export class CloudflareProvider implements HostingProvider {
             if (!linkRes.ok) {
               const errorText = await linkRes.text();
               // If it failed because it exists but wasn't in list (unlikely but safe)
-              if (errorText.includes('already exists') || errorText.includes('1008')) {
+              if (
+                errorText.includes('already exists') ||
+                errorText.includes('already added') ||
+                errorText.includes('1008') ||
+                errorText.includes('8000018')
+              ) {
                 logger.info(`[Cloudflare Pages] Domain ${domain} already linked.`);
               } else {
                 logger.warn(`[Cloudflare Pages] Failed to link domain ${domain}: ${errorText}`);
