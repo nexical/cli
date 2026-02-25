@@ -133,12 +133,29 @@ PROCESS:
         // Build
         if (isManual && app.buildCommand) {
           this.info(`  Building ${app.name} locally...`);
+
+          const buildEnv: Record<string, string> = {
+            ...(process.env as Record<string, string>),
+            ...(app.env || {}),
+          };
+
+          if (app.domain) {
+            const domain = Array.isArray(app.domain) ? app.domain[0] : app.domain;
+            buildEnv.SITE = `https://${domain}`;
+            buildEnv.BASE = '/';
+          }
+
           if (context.options.dryRun) {
             this.info(`  [Dry Run] Would run build: ${app.buildCommand}`);
+            if (buildEnv.SITE) {
+              this.info(
+                `  [Dry Run] Environment override: SITE=${buildEnv.SITE} BASE=${buildEnv.BASE}`,
+              );
+            }
           } else {
             try {
               const { execAsync } = await import('../deploy/utils');
-              await execAsync(app.buildCommand);
+              await execAsync(app.buildCommand, { env: buildEnv });
             } catch (e: unknown) {
               const message = e instanceof Error ? e.message : String(e);
               this.error(`Build failed for ${app.name}: ${message}`);
