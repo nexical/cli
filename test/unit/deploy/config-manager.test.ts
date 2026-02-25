@@ -16,12 +16,14 @@ describe('ConfigManager', () => {
   it('should load config', async () => {
     const mockConfig: NexicalConfig = {
       deploy: {
-        backend: {
-          provider: 'railway',
+        apps: {
+          backend: { provider: 'railway' },
         },
       },
     };
-    vi.mocked(fs.readFile).mockResolvedValue('deploy:\n  backend:\n    provider: railway');
+    vi.mocked(fs.readFile).mockResolvedValue(
+      'deploy:\n  apps:\n    backend:\n      provider: railway',
+    );
     const config = await manager.load();
     expect(config).toEqual(mockConfig);
   });
@@ -42,8 +44,10 @@ describe('ConfigManager', () => {
   it('should save config', async () => {
     const mockConfig: NexicalConfig = {
       deploy: {
-        frontend: {
-          provider: 'cloudflare',
+        apps: {
+          frontend: {
+            provider: 'cloudflare',
+          },
         },
       },
     };

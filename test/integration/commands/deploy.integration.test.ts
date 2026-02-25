@@ -5,6 +5,10 @@ import path from 'node:path';
 import fs from 'fs-extra';
 import { CLI } from '@nexical/cli-core';
 
+const mocks = vi.hoisted(() => ({
+  dnsProvision: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock ConfigManager and Registry to control provider behavior without relying on real files or dynamic imports
 vi.mock('../../../src/deploy/config-manager.js', () => {
   return {
@@ -13,9 +17,10 @@ vi.mock('../../../src/deploy/config-manager.js', () => {
         load: vi.fn().mockResolvedValue({
           deploy: {
             apps: {
-              backend: { provider: 'railway' },
-              frontend: { provider: 'cloudflare' },
+              api: { provider: 'railway', domain: 'api.test.com' },
+              web: { provider: 'cloudflare' },
             },
+            dns: { provider: 'cloudflare' },
             repository: { provider: 'github' },
           },
         }),
@@ -37,6 +42,7 @@ vi.mock('../../../src/deploy/registry.js', () => {
               provision: vi.fn().mockResolvedValue(undefined),
               getSecrets: vi.fn().mockResolvedValue({ R_SEC: 'val' }),
               getVariables: vi.fn().mockResolvedValue({ R_VAR: 'val' }),
+              getDefaultDnsTarget: vi.fn().mockReturnValue('deploy.railway.app'),
             };
           }
           if (name === 'cloudflare') {
@@ -45,6 +51,7 @@ vi.mock('../../../src/deploy/registry.js', () => {
               provision: vi.fn().mockResolvedValue(undefined),
               getSecrets: vi.fn().mockResolvedValue({ C_SEC: 'val' }),
               getVariables: vi.fn().mockResolvedValue({ C_VAR: 'val' }),
+              getDefaultDnsTarget: vi.fn().mockReturnValue('test.pages.dev'),
             };
           }
           return undefined;
@@ -60,6 +67,10 @@ vi.mock('../../../src/deploy/registry.js', () => {
             await fs.ensureDir(targetDir);
             await fs.writeFile(targetFile, 'yaml content');
           }),
+        }),
+        getDnsProvider: vi.fn().mockReturnValue({
+          name: 'cloudflare',
+          provision: mocks.dnsProvision,
         }),
       };
     }),
@@ -111,7 +122,7 @@ describe('Deploy Command Integration', () => {
       const deployCmd = new DeployCommand(cli);
 
       // Execute run with only backend
-      await deployCmd.run({ env: 'production', apps: 'backend' });
+      await deployCmd.run({ env: 'production', apps: 'api' });
 
       // Verification: The mock ProviderRegistry.getDeploymentProvider was only called for 'backend'
       // and NOT for 'frontend'. In this simpler verification, we just check no error was thrown.
@@ -142,6 +153,25 @@ describe('Deploy Command Integration', () => {
       );
     } finally {
       mockExit.mockRestore();
+      process.chdir(originalCwd);
+    }
+  });
+
+  it('should provision DNS records successfully', async () => {
+    const originalCwd = process.cwd();
+    try {
+      const cli = new CLI({ commandName: 'nexical' });
+      process.chdir(projectDir);
+
+      const deployCmd = new DeployCommand(cli);
+
+      // We expect this to execute our mock DnsProvider since it's in the simulated config
+      await deployCmd.run({ env: 'production' });
+
+      expect(mocks.dnsProvision).toHaveBeenCalledWith(expect.anything(), [
+        { type: 'CNAME', name: 'api.test.com', content: 'deploy.railway.app', proxied: true },
+      ]);
+    } finally {
       process.chdir(originalCwd);
     }
   });

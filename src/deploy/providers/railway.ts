@@ -224,4 +224,15 @@ export class RailwayProvider implements HostingProvider {
       ],
     };
   }
+
+  getDefaultDnsTarget(app: AppConfig): string | undefined {
+    // Railway typically creates a [project-name]-[environment].up.railway.app domain.
+    // For simpler custom domain linking, users often just CNAME directly to up.railway.app
+    // or the specific assigned railway generated domain if it's predictable.
+    // For automatic resolution without runtime polling, returning the predictable project CNAME.
+    if (app.projectName) {
+      return `${app.projectName}.up.railway.app`;
+    }
+    return undefined;
+  }
 }

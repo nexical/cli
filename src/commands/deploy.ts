@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import { BaseCommand } from '@nexical/cli-core';
 import { ConfigManager } from '../deploy/config-manager';
 import { ProviderRegistry } from '../deploy/registry';
-import { DeploymentContext, HostingProvider, AppConfig } from '../deploy/types';
+import { DeploymentContext, HostingProvider, AppConfig, DnsRecord } from '../deploy/types';
 
 export default class DeployCommand extends BaseCommand {
   static usage = 'deploy';
@@ -189,6 +189,50 @@ PROCESS:
     // Generate Workflows
     this.info('Generating CI/CD Workflows...');
     await repoProvider.generateWorkflow(context, activeApps);
+
+    // DNS Provisioning
+    const dnsConfig = config.deploy?.dns;
+    if (dnsConfig?.provider) {
+      const dnsProvider = registry.getDnsProvider(dnsConfig.provider);
+      if (!dnsProvider) {
+        this.error(`DNS provider '${dnsConfig.provider}' not found.`);
+        return;
+      }
+
+      const dnsRecords: DnsRecord[] = [];
+      for (const { app, provider } of activeApps) {
+        const target =
+          app.dnsTarget ||
+          (provider.getDefaultDnsTarget ? provider.getDefaultDnsTarget(app) : undefined);
+
+        if (app.domain && target) {
+          const domains = Array.isArray(app.domain) ? app.domain : [app.domain];
+          for (const domain of domains) {
+            const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(target);
+            dnsRecords.push({
+              type: isIp ? 'A' : 'CNAME',
+              name: domain,
+              content: target,
+              proxied: true,
+            });
+          }
+        } else if (app.domain && !target) {
+          this.warn(
+            `App '${app.name}' specifies domain(s) but no 'dnsTarget' could be inferred. Skipping DNS auto-provisioning.`,
+          );
+        }
+      }
+
+      if (dnsRecords.length > 0) {
+        this.info(`Configuring DNS with ${dnsProvider.name}...`);
+        try {
+          await dnsProvider.provision(context, dnsRecords);
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          this.warn(`DNS provisioning failed: ${message}`);
+        }
+      }
+    }
 
     this.success('Deployment configuration complete!');
   }

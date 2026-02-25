@@ -35,9 +35,9 @@ describe('ProviderRegistry', () => {
     vi.restoreAllMocks();
   });
 
-  describe('getDeploymentProvider', () => {
+  describe('getHostingProvider', () => {
     it('should return undefined for non-existent provider', () => {
-      expect(registry.getDeploymentProvider('missing')).toBeUndefined();
+      expect(registry.getHostingProvider('missing')).toBeUndefined();
     });
   });
 
@@ -49,9 +49,9 @@ describe('ProviderRegistry', () => {
         getCIConfig() {}
       };
       (
-        registry as unknown as { registerProviderFromModule: (mod: any, name: string) => void }
+        registry as unknown as { registerProviderFromModule: (mod: unknown, name: string) => void }
       ).registerProviderFromModule({ default: MockProvider }, 'test');
-      expect(registry.getDeploymentProvider('valid-deploy')).toBeDefined();
+      expect(registry.getHostingProvider('valid-deploy')).toBeDefined();
     });
 
     it('should register a valid repository provider', () => {
@@ -61,7 +61,7 @@ describe('ProviderRegistry', () => {
         generateWorkflow() {}
       };
       (
-        registry as unknown as { registerProviderFromModule: (mod: any, name: string) => void }
+        registry as unknown as { registerProviderFromModule: (mod: unknown, name: string) => void }
       ).registerProviderFromModule({ default: MockProvider }, 'test');
       expect(registry.getRepositoryProvider('valid-repo')).toBeDefined();
     });
@@ -73,19 +73,19 @@ describe('ProviderRegistry', () => {
         getCIConfig() {}
       };
       (
-        registry as unknown as { registerProviderFromModule: (mod: any, name: string) => void }
+        registry as unknown as { registerProviderFromModule: (mod: unknown, name: string) => void }
       ).registerProviderFromModule({ Named: MockProvider }, 'test');
-      expect(registry.getDeploymentProvider('named-export')).toBeDefined();
+      expect(registry.getHostingProvider('named-export')).toBeDefined();
     });
 
     it('should handle missing exported provider', async () => {
       const mockModule = {};
       await (
         registry as unknown as {
-          registerProviderFromModule: (mod: any, name: string) => Promise<void>;
+          registerProviderFromModule: (mod: unknown, name: string) => Promise<void>;
         }
       ).registerProviderFromModule(mockModule, 'test');
-      expect(registry.getDeploymentProvider('test')).toBeUndefined();
+      expect(registry.getHostingProvider('test')).toBeUndefined();
     });
 
     it('should handle instantiation failure', async () => {
@@ -95,20 +95,20 @@ describe('ProviderRegistry', () => {
       const mockModule = { Provider: MockProvider };
       await (
         registry as unknown as {
-          registerProviderFromModule: (mod: any, name: string) => Promise<void>;
+          registerProviderFromModule: (mod: unknown, name: string) => Promise<void>;
         }
       ).registerProviderFromModule(mockModule, 'fail');
-      expect(registry.getDeploymentProvider('fail')).toBeUndefined();
+      expect(registry.getHostingProvider('fail')).toBeUndefined();
     });
 
     it('should handle non-class provider', async () => {
       const mockModule = { Provider: { name: 'static' } };
       await (
         registry as unknown as {
-          registerProviderFromModule: (mod: any, name: string) => Promise<void>;
+          registerProviderFromModule: (mod: unknown, name: string) => Promise<void>;
         }
       ).registerProviderFromModule(mockModule, 'static');
-      expect(registry.getDeploymentProvider('static')).toBeUndefined();
+      expect(registry.getHostingProvider('static')).toBeUndefined();
     });
   });
 
@@ -136,7 +136,7 @@ describe('ProviderRegistry', () => {
 
       // Assert
       expect(fs.readdir).toHaveBeenCalled();
-      expect(registry.getDeploymentProvider('core-mock')).toBeDefined();
+      expect(registry.getHostingProvider('core-mock')).toBeDefined();
     });
 
     it('should warn if no providers directory found', async () => {
@@ -196,7 +196,7 @@ describe('ProviderRegistry', () => {
       await registry.loadLocalProviders(mockRoot);
 
       expect(mockJitiRequest).toHaveBeenCalledWith(path.join(deployDir, 'custom.ts'));
-      expect(registry.getDeploymentProvider('local-custom')).toBeDefined();
+      expect(registry.getHostingProvider('local-custom')).toBeDefined();
     });
 
     it('should ignore non-js/ts files', async () => {
@@ -246,11 +246,14 @@ describe('ProviderRegistry', () => {
 
     it('should handle non-Error during registration in loadCoreProviders', async () => {
       vi.spyOn(fs, 'access').mockResolvedValue(undefined);
-      vi.spyOn(fs, 'readdir').mockResolvedValue(['fail-registration.js'] as any);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['fail-registration.js'] as unknown as never);
 
       // Mock registerProviderFromModule to throw a string
       const regSpy = vi
-        .spyOn(registry as any, 'registerProviderFromModule')
+        .spyOn(
+          registry as unknown as { registerProviderFromModule: (m: unknown, s: string) => void },
+          'registerProviderFromModule',
+        )
         .mockImplementation(() => {
           throw 'Registration string fail';
         });

@@ -192,4 +192,15 @@ export class CloudflareProvider implements HostingProvider {
 
     logger.success(`Successfully deployed ${app.name} to Cloudflare Pages.`);
   }
+
+  getDefaultDnsTarget(app: AppConfig): string | undefined {
+    // Cloudflare pages gives a predictable .pages.dev alias
+    // Note: This does not take environment into account for custom domains usually,
+    // custom domains are typically linked to the production project alias or a specific branch alias.
+    // For standard custom domain linkage, we return the production project alias.
+    if (app.projectName) {
+      return `${app.projectName}.pages.dev`;
+    }
+    return undefined;
+  }
 }

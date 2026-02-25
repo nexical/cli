@@ -19,6 +19,8 @@ export interface AppConfig {
   options?: Record<string, unknown>;
   env?: Record<string, string>;
   secrets?: Record<string, string>;
+  domain?: string | string[];
+  dnsTarget?: string;
   [key: string]: unknown;
 }
 
@@ -46,6 +48,9 @@ export interface HostingProvider {
 
   // Performs a manual build/deployment from the local machine
   deploy?(context: DeploymentContext, app: AppConfig): Promise<void>;
+
+  // Optional: Automatically infer the DnsTarget from the hosting configuration
+  getDefaultDnsTarget?(app: AppConfig): string | undefined;
 }
 
 export interface RepositoryProvider {
@@ -69,5 +74,22 @@ export interface NexicalConfig {
       provider: string;
       options?: Record<string, unknown>;
     };
+    dns?: {
+      provider: string;
+      [key: string]: unknown;
+    };
   };
+}
+
+export interface DnsRecord {
+  type: string;
+  name: string;
+  content: string;
+  proxied?: boolean;
+}
+
+export interface DnsProvider {
+  name: string;
+  type?: 'dns';
+  provision(context: DeploymentContext, records: DnsRecord[]): Promise<void>;
 }

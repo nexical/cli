@@ -1,11 +1,12 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { logger } from '@nexical/cli-core';
-import { HostingProvider, RepositoryProvider } from './types';
+import { HostingProvider, RepositoryProvider, DnsProvider } from './types';
 
 export class ProviderRegistry {
   private hostingProviders: Map<string, HostingProvider> = new Map();
   private repositoryProviders: Map<string, RepositoryProvider> = new Map();
+  private dnsProviders: Map<string, DnsProvider> = new Map();
 
   registerHostingProvider(provider: HostingProvider) {
     this.hostingProviders.set(provider.name, provider);
@@ -23,42 +24,62 @@ export class ProviderRegistry {
     return this.repositoryProviders.get(name);
   }
 
+  registerDnsProvider(provider: DnsProvider) {
+    this.dnsProviders.set(provider.name, provider);
+  }
+
+  getDnsProvider(name: string): DnsProvider | undefined {
+    return this.dnsProviders.get(name);
+  }
+
   private registerProviderFromModule(module: unknown, source: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const moduleAny = module as any;
-    let provider = moduleAny.default;
+    const exports = module as Record<string, unknown>;
+    let ProviderCandidate = exports?.default;
 
     // Handle named exports if default is missing (fallback)
-    if (!provider && Object.keys(moduleAny).length > 0) {
+    if (!ProviderCandidate && exports && Object.keys(exports).length > 0) {
       // Try to find a class export that looks like a provider
-      for (const key of Object.keys(moduleAny)) {
-        if (typeof moduleAny[key] === 'function') {
-          provider = moduleAny[key];
+      for (const key of Object.keys(exports)) {
+        if (typeof exports[key] === 'function') {
+          ProviderCandidate = exports[key];
           break;
         }
       }
     }
 
-    // If it's a class, instantiate it
-    if (typeof provider === 'function') {
+    if (!ProviderCandidate) return;
+
+    let instance: unknown;
+    if (typeof ProviderCandidate === 'function') {
       try {
-        provider = new provider();
+        instance = new (ProviderCandidate as new () => unknown)();
       } catch {
-        // Not a constructor or failed
+        // Not a constructor or failed, could be a regular function
+        instance = ProviderCandidate;
       }
+    } else {
+      instance = ProviderCandidate;
     }
 
-    if (provider) {
-      if (typeof provider.provision === 'function' && typeof provider.getCIConfig === 'function') {
-        logger.info(`[Registry] Loaded ${source} hosting provider: ${provider.name}`);
-        this.registerHostingProvider(provider as HostingProvider);
-      } else if (
-        typeof provider.configureSecrets === 'function' &&
-        typeof provider.generateWorkflow === 'function'
-      ) {
-        logger.info(`[Registry] Loaded ${source} repository provider: ${provider.name}`);
-        this.registerRepositoryProvider(provider as RepositoryProvider);
-      }
+    if (!instance || typeof instance !== 'object') return;
+
+    const provider = instance as Record<string, unknown>;
+
+    if (typeof provider.provision === 'function' && typeof provider.getCIConfig === 'function') {
+      const p = provider as unknown as HostingProvider;
+      logger.info(`[Registry] Loaded ${source} hosting provider: ${p.name}`);
+      this.registerHostingProvider(p);
+    } else if (
+      typeof provider.configureSecrets === 'function' &&
+      typeof provider.generateWorkflow === 'function'
+    ) {
+      const p = provider as unknown as RepositoryProvider;
+      logger.info(`[Registry] Loaded ${source} repository provider: ${p.name}`);
+      this.registerRepositoryProvider(p);
+    } else if (typeof provider.provision === 'function' && provider.type === 'dns') {
+      const p = provider as unknown as DnsProvider;
+      logger.info(`[Registry] Loaded ${source} DNS provider: ${p.name}`);
+      this.registerDnsProvider(p);
     }
   }
 
