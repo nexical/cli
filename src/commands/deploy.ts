@@ -92,6 +92,8 @@ PROCESS:
       apps = filteredApps;
     }
 
+    this.info(`Selected applications: ${apps.map((a) => a.name).join(', ')}`);
+
     if (apps.length === 0) {
       this.error('No applications found in nexical.yaml. Please configure [deploy.apps].');
     }

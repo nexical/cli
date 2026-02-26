@@ -1,7 +1,8 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { logger } from '@nexical/cli-core';
-import { HostingProvider, DeploymentContext, CIConfig, AppConfig } from '../types';
-import { execAsync } from '../utils';
+import { HostingProvider, DeploymentContext, CIConfig, AppConfig, DeploymentError } from '../types';
+import { spawnAsync } from '../utils';
 
 export interface CloudflareConfig {
   token?: string;
@@ -10,6 +11,69 @@ export interface CloudflareConfig {
 
 export class CloudflareProvider implements HostingProvider {
   name = 'cloudflare';
+
+  private async runWrangler(
+    context: DeploymentContext,
+    app: AppConfig,
+    args: string[],
+    options: { cwd?: string; env?: NodeJS.ProcessEnv; commandName: string },
+    retries = 5,
+  ): Promise<void> {
+    const debug = !!context.options.debug;
+    const logsDir = path.resolve(context.cwd, 'logs');
+
+    if (!debug) {
+      await fs.promises.mkdir(logsDir, { recursive: true });
+    }
+
+    const logFile = path.resolve(logsDir, `cloudflare-${app.name}-${options.commandName}.log`);
+
+    if (!debug) {
+      logger.info(`Log file: ${logFile}`);
+    }
+
+    let attempt = 0;
+    while (attempt <= retries) {
+      try {
+        await spawnAsync('wrangler', args, {
+          cwd: options.cwd || context.cwd,
+          env: options.env,
+          debug,
+          logFile,
+        });
+        return;
+      } catch (err: unknown) {
+        attempt++;
+        const error = err as DeploymentError;
+        const message = error.message || String(err);
+        const output = error.output || '';
+        const combined = `${message}\n${output}`;
+
+        // Use regex for more robust detection, ignoring case and potential ANSI codes
+        const transientRegex =
+          /503|connection termination|upstream connect error|reset by peer|malformed response|Service Unavailable/i;
+        const isTransient = transientRegex.test(combined);
+
+        if (debug) {
+          logger.info(`Command failed on attempt ${attempt}. Checking for transient error...`);
+          logger.info(`Transient match: ${isTransient}`);
+          if (!isTransient) {
+            logger.debug(`Full failed output context:\n${combined}`);
+          }
+        }
+
+        if (isTransient && attempt <= retries) {
+          const delay = Math.min(Math.pow(2, attempt) * 2000, 30000); // Max 30s delay
+          logger.warn(
+            `Cloudflare API returned transient error (Attempt ${attempt}/${retries}). Retrying in ${delay / 1000}s...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
 
   async provision(context: DeploymentContext, app: AppConfig): Promise<void> {
     const env = (context.options.env as string) || 'production';
@@ -47,17 +111,47 @@ export class CloudflareProvider implements HostingProvider {
         ...secrets,
         NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --dns-result-order=ipv4first`.trim(),
       };
+      const projectName = env === 'production' ? baseProjectName : `${baseProjectName}-${env}`;
+      const apiToken = secrets.CLOUDFLARE_API_TOKEN;
+      const accountId = secrets.CLOUDFLARE_ACCOUNT_ID;
+
       logger.info(`Ensuring Cloudflare Pages project "${projectName}" exists...`);
-      try {
-        await execAsync(`wrangler pages project create ${projectName} --production-branch main`, {
-          env: processEnv,
-        });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (message.includes('already exists')) {
-          logger.info('Cloudflare project already exists.');
-        } else {
-          throw err;
+
+      // Check if project exists via API first to avoid unnecessary creation attempts
+      const projectRes = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${projectName}`,
+        {
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (projectRes.ok) {
+        logger.info(`Cloudflare project "${projectName}" already exists.`);
+      } else {
+        try {
+          await this.runWrangler(
+            context,
+            app,
+            ['pages', 'project', 'create', projectName, '--production-branch', 'main'],
+            {
+              env: processEnv,
+              commandName: 'provision',
+            },
+          );
+        } catch (err: unknown) {
+          const error = err as DeploymentError;
+          const message = error.message || String(err);
+          const output = error.output || '';
+          const combined = `${message}\n${output}`.toLowerCase();
+
+          if (combined.includes('already exists') || combined.includes('already_exists')) {
+            logger.info('Cloudflare project already exists (detected after creation attempt).');
+          } else {
+            throw err;
+          }
         }
       }
 
@@ -258,10 +352,16 @@ export class CloudflareProvider implements HostingProvider {
       NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --dns-result-order=ipv4first`.trim(),
     };
 
-    await execAsync(`wrangler pages deploy ${artifactPath} --project-name=${projectName}`, {
-      cwd: targetDir,
-      env: processEnv,
-    });
+    await this.runWrangler(
+      context,
+      app,
+      ['pages', 'deploy', artifactPath, `--project-name=${projectName}`],
+      {
+        cwd: targetDir,
+        env: processEnv,
+        commandName: 'deploy',
+      },
+    );
 
     logger.success(`Successfully deployed ${app.name} to Cloudflare Pages.`);
   }

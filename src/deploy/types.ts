@@ -1,3 +1,8 @@
+export interface DeploymentError extends Error {
+  output?: string;
+  code?: number | null;
+}
+
 export interface CIConfig {
   secrets: string[];
   variables: string[];
