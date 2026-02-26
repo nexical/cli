@@ -139,6 +139,7 @@ PROCESS:
           const buildEnv: Record<string, string> = {
             ...(process.env as Record<string, string>),
             ...(app.env || {}),
+            SKIP_DB_PUSH: 'true',
           };
 
           if (app.domain) {

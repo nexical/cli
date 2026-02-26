@@ -47,18 +47,24 @@ export class CloudflareProvider implements HostingProvider {
         const error = err as DeploymentError;
         const message = error.message || String(err);
         const output = error.output || '';
-        const combined = `${message}\n${output}`;
 
-        // Use regex for more robust detection, ignoring case and potential ANSI codes
+        // Strip ANSI escape codes for cleaner regex matching
+        // eslint-disable-next-line no-control-regex
+        const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*[mK]/g, '');
+        const cleanMessage = stripAnsi(message);
+        const cleanOutput = stripAnsi(output);
+        const combined = `${cleanMessage}\n${cleanOutput}`;
+
+        // Expanded transient regex to catch more variations of connection/API errors
         const transientRegex =
-          /503|connection termination|upstream connect error|reset by peer|malformed response|Service Unavailable/i;
+          /503|502|504|connection termination|upstream connect error|reset by|malformed response|Service Unavailable|Internal Server Error|ECONNRESET|ETIMEDOUT/i;
         const isTransient = transientRegex.test(combined);
 
         if (debug) {
           logger.info(`Command failed on attempt ${attempt}. Checking for transient error...`);
           logger.info(`Transient match: ${isTransient}`);
           if (!isTransient) {
-            logger.debug(`Full failed output context:\n${combined}`);
+            logger.debug(`Full failed output context (cleaned):\n${combined}`);
           }
         }
 
