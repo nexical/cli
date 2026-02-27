@@ -79,10 +79,26 @@ export class GitHubProvider implements RepositoryProvider {
 
       // Build (if applicable)
       if (app.buildCommand) {
-        steps.push({
+        const buildStep: any = {
           name: `Build ${app.name}`,
           run: app.buildCommand,
-        });
+        };
+
+        const buildEnv: Record<string, string> = {};
+        if (app.domain) {
+          const domain = Array.isArray(app.domain) ? app.domain[0] : app.domain;
+          buildEnv.SITE = `https://${domain}`;
+        }
+
+        if (app.env) {
+          Object.assign(buildEnv, app.env);
+        }
+
+        if (Object.keys(buildEnv).length > 0) {
+          buildStep.env = buildEnv;
+        }
+
+        steps.push(buildStep);
       }
 
       // Provider Install Steps

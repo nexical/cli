@@ -145,7 +145,6 @@ PROCESS:
           if (app.domain) {
             const domain = Array.isArray(app.domain) ? app.domain[0] : app.domain;
             buildEnv.SITE = `https://${domain}`;
-            buildEnv.BASE = '/';
           }
 
           if (context.options.dryRun) {
