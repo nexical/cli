@@ -5,6 +5,7 @@ import { AppConfig } from '../deploy/types.js';
 import fs from 'fs-extra';
 import { spawn, ChildProcess } from 'node:child_process';
 import process from 'node:process';
+import { EnvManager } from '../utils/env-manager.js';
 
 export default class StartCommand extends BaseCommand {
   static usage = 'start';
@@ -29,6 +30,11 @@ export default class StartCommand extends BaseCommand {
     const skipInit = !!options.skipInit;
 
     this.info('🚀 Initializing Nexical Dev Environment...');
+
+    const envManager = new EnvManager(this);
+
+    // 0. Ensure environment variables and symlinks
+    await envManager.ensureEnv(projectRoot);
 
     if (!skipInit) {
       // 1. npm install in project root
@@ -88,6 +94,9 @@ export default class StartCommand extends BaseCommand {
     }
 
     this.info(`✨ Starting ${apps.length} applications in parallel...`);
+
+    // Ensure symlinks for all apps before starting
+    await envManager.ensureSymlinks(projectRoot, apps);
 
     const processes: { name: string; child: ChildProcess }[] = [];
 
