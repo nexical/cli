@@ -13,6 +13,11 @@ export const AppConfigSchema = z
     secrets: z.record(z.string(), z.string()).optional(),
     domain: z.union([z.string(), z.array(z.string())]).optional(),
     dnsTarget: z.string().optional(),
+    dev: z
+      .object({
+        port: z.number().optional(),
+      })
+      .optional(),
   })
   .passthrough();
 

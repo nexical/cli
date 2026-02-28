@@ -147,12 +147,26 @@ PROCESS:
             buildEnv.SITE = `https://${domain}`;
           }
 
+          // Inject PUBLIC_API_URL for the frontend if a backend is defined
+          if (app.name === 'frontend') {
+            const backendApp = apps.find((a) => a.name === 'backend');
+            if (backendApp && backendApp.domain) {
+              const backendDomain = Array.isArray(backendApp.domain)
+                ? backendApp.domain[0]
+                : backendApp.domain;
+              buildEnv.PUBLIC_API_URL = `https://${backendDomain}/api`;
+              this.info(`  Injected PUBLIC_API_URL=${buildEnv.PUBLIC_API_URL} for frontend build`);
+            }
+          }
+
           if (context.options.dryRun) {
             this.info(`  [Dry Run] Would run build: ${app.buildCommand}`);
-            if (buildEnv.SITE) {
-              this.info(
-                `  [Dry Run] Environment override: SITE=${buildEnv.SITE} BASE=${buildEnv.BASE}`,
-              );
+            const overrides = Object.keys(buildEnv).filter(
+              (key) => buildEnv[key] !== process.env[key],
+            );
+            if (overrides.length > 0) {
+              const overrideStr = overrides.map((key) => `${key}=${buildEnv[key]}`).join(' ');
+              this.info(`  [Dry Run] Environment overrides: ${overrideStr}`);
             }
           } else {
             try {

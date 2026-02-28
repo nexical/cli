@@ -26,6 +26,9 @@ export interface AppConfig {
   secrets?: Record<string, string>;
   domain?: string | string[];
   dnsTarget?: string;
+  dev?: {
+    port?: number;
+  };
   [key: string]: unknown;
 }
 

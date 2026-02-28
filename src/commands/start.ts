@@ -6,6 +6,7 @@ import fs from 'fs-extra';
 import { spawn, ChildProcess } from 'node:child_process';
 import process from 'node:process';
 import { EnvManager } from '../utils/env-manager.js';
+import dotenv from 'dotenv';
 
 export default class StartCommand extends BaseCommand {
   static usage = 'start';
@@ -35,6 +36,9 @@ export default class StartCommand extends BaseCommand {
 
     // 0. Ensure environment variables and symlinks
     await envManager.ensureEnv(projectRoot);
+
+    // Load root .env into CLI process early to ensure variables are available for config and apps
+    dotenv.config({ path: path.join(projectRoot, '.env') });
 
     if (!skipInit) {
       // 1. npm install in project root
@@ -118,14 +122,42 @@ export default class StartCommand extends BaseCommand {
 
       this.info(`▶️ Starting ${app.name}...`);
 
-      const child = spawn('npm', ['run', 'dev'], {
+      // Build environment variables with placeholder resolution
+      const devEnv: Record<string, string> = {
+        ...process.env,
+        FORCE_COLOR: '1',
+      };
+
+      // Resolve placeholders in app.env
+      const resolveValue = (value: string): string => {
+        return value.replace(/\{\{apps\.([^.]+)\.dev\.port\}\}/g, (_, appName) => {
+          const targetApp = apps.find((a) => a.name === appName);
+          return targetApp?.dev?.port?.toString() || '';
+        });
+      };
+
+      if (app.dev?.port) {
+        devEnv.PORT = app.dev.port.toString();
+        this.info(`  Assigned PORT=${devEnv.PORT} for ${app.name}`);
+      }
+
+      const rawEnv = app.env || {};
+      for (const [key, value] of Object.entries(rawEnv)) {
+        devEnv[key] = resolveValue(value);
+        if (devEnv[key] !== value) {
+          this.info(`  Resolved ${key}=${devEnv[key]} for ${app.name}`);
+        }
+      }
+
+      const args = ['run', 'dev'];
+      if (devEnv.PORT) {
+        args.push('--', '--port', devEnv.PORT);
+      }
+
+      const child = spawn('npm', args, {
         cwd: appPath,
         stdio: 'pipe',
-        env: {
-          ...process.env,
-          FORCE_COLOR: '1',
-          ...(app.env || {}),
-        },
+        env: devEnv,
         shell: true,
       });
 
