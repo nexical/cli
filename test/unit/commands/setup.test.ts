@@ -70,14 +70,13 @@ describe('SetupCommand', () => {
       return false;
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
+    // No longer need lstatSync mock as we use fs.remove directly
 
     await command.run();
 
     expect(command.info).toHaveBeenCalledWith('Setting up frontend...');
     expect(command.info).toHaveBeenCalledWith('Setting up backend...');
-    expect(fs.removeSync).toHaveBeenCalled();
+    expect(fs.remove).toHaveBeenCalled();
     expect(fs.symlink).toHaveBeenCalled();
     expect(command.success).toHaveBeenCalledWith('Application setup complete.');
   });
@@ -99,15 +98,11 @@ describe('SetupCommand', () => {
 
   it('should log error if removal fails with non-ENOENT', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
 
     const error = new Error('Permission denied');
 
     (error as unknown as { code: string }).code = 'EACCES';
-    vi.mocked(fs.removeSync).mockImplementationOnce(() => {
-      throw error;
-    });
+    vi.mocked(fs.remove).mockRejectedValueOnce(error);
 
     await command.run();
 
@@ -116,14 +111,10 @@ describe('SetupCommand', () => {
 
   it('should ignore ENOENT error during removal', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
 
     const error = new Error('Not found');
     (error as unknown as { code: string }).code = 'ENOENT';
-    vi.mocked(fs.removeSync).mockImplementationOnce(() => {
-      throw error;
-    });
+    vi.mocked(fs.remove).mockRejectedValueOnce(error);
 
     await command.run();
 
@@ -134,11 +125,7 @@ describe('SetupCommand', () => {
 
   it('should re-throw non-object as error during removal', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
-    vi.mocked(fs.removeSync).mockImplementationOnce(() => {
-      throw 'string fail';
-    });
+    vi.mocked(fs.remove).mockRejectedValueOnce('string fail');
 
     await command.run();
     expect(command.error).toHaveBeenCalledWith(expect.stringContaining('string fail'));
@@ -146,11 +133,7 @@ describe('SetupCommand', () => {
 
   it('should re-throw error without code during removal', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
-    vi.mocked(fs.removeSync).mockImplementationOnce(() => {
-      throw new Error('No code');
-    });
+    vi.mocked(fs.remove).mockRejectedValueOnce(new Error('No code'));
 
     await command.run();
     expect(command.error).toHaveBeenCalledWith(expect.stringContaining('No code'));
@@ -158,8 +141,6 @@ describe('SetupCommand', () => {
 
   it('should log error if symlink fails with Error object', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
     vi.mocked(fs.symlink).mockRejectedValueOnce(new Error('Symlink failed'));
 
     await command.run();
@@ -169,8 +150,6 @@ describe('SetupCommand', () => {
 
   it('should log error if symlink fails with non-Error object', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.lstatSync).mockReturnValue({ isSymbolicLink: () => true } as unknown as any);
     vi.mocked(fs.symlink).mockRejectedValueOnce('String symlink fail');
 
     await command.run();

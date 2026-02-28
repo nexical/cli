@@ -37,26 +37,11 @@ export default class SetupCommand extends BaseCommand {
         }
 
         try {
-          // Remove existing destination if it exists (to ensure clean symlink)
-          // Be careful not to delete real files if they aren't symlinks?
-          // For now, we assume setup controls these.
-
           const destDir = path.dirname(dest);
           await fs.ensureDir(destDir);
 
-          try {
-            fs.lstatSync(dest);
-            fs.removeSync(dest);
-          } catch (e: unknown) {
-            const isEnoent =
-              e &&
-              typeof e === 'object' &&
-              'code' in e &&
-              (e as { code: string }).code === 'ENOENT';
-            if (!isEnoent) {
-              throw e;
-            }
-          }
+          // Force remove existing destination to ensure clean replacement
+          await fs.remove(dest);
 
           const relSource = path.relative(destDir, source);
           await fs.symlink(relSource, dest);
