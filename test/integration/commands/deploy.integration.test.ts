@@ -77,6 +77,9 @@ vi.mock('../../../src/deploy/registry.js', () => {
   };
 });
 
+vi.mock('../../../src/utils/env-manager.js');
+vi.mock('../../../src/commands/setup.js');
+
 describe('Deploy Command Integration', () => {
   let projectDir: string;
 

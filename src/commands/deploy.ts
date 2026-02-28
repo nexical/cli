@@ -1,9 +1,11 @@
 import path from 'node:path';
 import dotenv from 'dotenv';
 import { BaseCommand } from '@nexical/cli-core';
-import { ConfigManager } from '../deploy/config-manager';
-import { ProviderRegistry } from '../deploy/registry';
-import { DeploymentContext, HostingProvider, AppConfig, DnsRecord } from '../deploy/types';
+import { ConfigManager } from '../deploy/config-manager.js';
+import { ProviderRegistry } from '../deploy/registry.js';
+import { DeploymentContext, HostingProvider, AppConfig, DnsRecord } from '../deploy/types.js';
+import { EnvManager } from '../utils/env-manager.js';
+import SetupCommand from './setup.js';
 
 export default class DeployCommand extends BaseCommand {
   static usage = 'deploy';
@@ -54,8 +56,18 @@ PROCESS:
   async run(options: Record<string, unknown>) {
     this.info('Starting Nexical Deployment...');
 
+    const envManager = new EnvManager(this);
+    // 0. Ensure environment variables
+    await envManager.ensureEnv(process.cwd());
+
     // Load environment variables from .env
     dotenv.config({ path: path.join(process.cwd(), '.env'), quiet: true });
+
+    // 1. Run Nexical CLI setup command
+    this.info('⚙️ Running setup command...');
+    const setup = new SetupCommand(this.cli, { ...this.globalOptions, rootDir: process.cwd() });
+    await setup.init();
+    await setup.run();
 
     const configManager = new ConfigManager(process.cwd());
     const config = await configManager.load();

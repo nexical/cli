@@ -7,6 +7,8 @@ import { ConfigManager } from '../../../src/deploy/config-manager.js';
 import { NexicalConfig } from '../../../src/deploy/types.js';
 import process from 'node:process';
 import type { ChildProcess } from 'node:child_process';
+import { EnvManager } from '../../../src/utils/env-manager.js';
+import SetupCommand from '../../../src/commands/setup.js';
 
 vi.mock('@nexical/cli-core', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@nexical/cli-core')>();
@@ -26,6 +28,8 @@ vi.mock('@nexical/cli-core', async (importOriginal) => {
 vi.mock('fs-extra');
 vi.mock('child_process');
 vi.mock('../../../src/deploy/config-manager.js');
+vi.mock('../../../src/utils/env-manager.js');
+vi.mock('../../../src/commands/setup.js');
 
 describe('StartCommand', () => {
   let command: StartCommand;
@@ -76,6 +80,10 @@ describe('StartCommand', () => {
 
   it('should run init phase by default', async () => {
     await command.run({});
+
+    expect(EnvManager.prototype.ensureEnv).toHaveBeenCalledWith('/mock/root');
+    expect(SetupCommand.prototype.init).toHaveBeenCalled();
+    expect(SetupCommand.prototype.run).toHaveBeenCalled();
 
     const { runCommand } = await import('@nexical/cli-core');
     expect(runCommand).toHaveBeenCalledWith('npm install', '/mock/root');

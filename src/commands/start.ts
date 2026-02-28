@@ -7,7 +7,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import process from 'node:process';
 import { EnvManager } from '../utils/env-manager.js';
 import dotenv from 'dotenv';
-
+import SetupCommand from './setup.js';
 export default class StartCommand extends BaseCommand {
   static usage = 'start';
   static description = 'Initialize and start the local development environment.';
@@ -39,6 +39,12 @@ export default class StartCommand extends BaseCommand {
 
     // Load root .env into CLI process early to ensure variables are available for config and apps
     dotenv.config({ path: path.join(projectRoot, '.env') });
+
+    // 1. Run Nexical CLI setup command
+    this.info('⚙️ Running setup command...');
+    const setup = new SetupCommand(this.cli, { ...this.globalOptions, rootDir: projectRoot });
+    await setup.init();
+    await setup.run();
 
     if (!skipInit) {
       // 1. npm install in project root

@@ -35,6 +35,8 @@ vi.mock('../../../src/deploy/registry.js', () => {
 });
 
 vi.mock('dotenv');
+vi.mock('../../../src/utils/env-manager.js');
+vi.mock('../../../src/commands/setup.js');
 vi.mock('@nexical/cli-core', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@nexical/cli-core')>();
   return {
@@ -51,6 +53,8 @@ vi.mock('@nexical/cli-core', async (importOriginal) => {
 
 import { ConfigManager } from '../../../src/deploy/config-manager.js';
 import { ProviderRegistry } from '../../../src/deploy/registry.js';
+import { EnvManager } from '../../../src/utils/env-manager.js';
+import SetupCommand from '../../../src/commands/setup.js';
 
 describe('DeployCommand', () => {
   let command: DeployCommand;
@@ -136,7 +140,10 @@ describe('DeployCommand', () => {
 
     await command.run({ env: 'production' });
 
+    expect(EnvManager.prototype.ensureEnv).toHaveBeenCalled();
     expect(dotenv.config).toHaveBeenCalled();
+    expect(SetupCommand.prototype.init).toHaveBeenCalled();
+    expect(SetupCommand.prototype.run).toHaveBeenCalled();
     expect(mockApi.provision).toHaveBeenCalled();
     expect(mockWeb.provision).toHaveBeenCalled();
     expect(mockRepo.configureSecrets).toHaveBeenCalledWith(

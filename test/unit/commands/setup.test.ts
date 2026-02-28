@@ -9,8 +9,7 @@ vi.mock('fs-extra');
 describe('SetupCommand', () => {
   let command: SetupCommand;
   let mockCli: CLI;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let exitSpy: any;
+  let exitSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -27,8 +26,11 @@ describe('SetupCommand', () => {
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/project/root');
 
     // Mock process.exit
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as unknown as any);
+    exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => {}) as unknown as (
+        code?: number | string | null | undefined,
+      ) => never);
   });
 
   afterEach(() => {
