@@ -8,6 +8,7 @@ import process from 'node:process';
 import { EnvManager } from '../utils/env-manager.js';
 import dotenv from 'dotenv';
 import SetupCommand from './setup.js';
+
 export default class StartCommand extends BaseCommand {
   static usage = 'start';
   static description = 'Initialize and start the local development environment.';
@@ -38,7 +39,7 @@ export default class StartCommand extends BaseCommand {
     await envManager.ensureEnv(projectRoot);
 
     // Load root .env into CLI process early to ensure variables are available for config and apps
-    dotenv.config({ path: path.join(projectRoot, '.env') });
+    dotenv.config({ path: path.join(projectRoot, '.env'), quiet: true });
 
     // 1. Run Nexical CLI setup command
     this.info('⚙️ Running setup command...');
@@ -65,6 +66,18 @@ export default class StartCommand extends BaseCommand {
         } catch (e: unknown) {
           this.error(`Failed to start database: ${e instanceof Error ? e.message : String(e)}`);
           // Continue anyway, as DB might be already running or handled externally
+        }
+      }
+
+      // 3. Start email if compose.email.yml exists
+      const emailComposePath = path.join(projectRoot, 'compose.email.yml');
+      if (await fs.pathExists(emailComposePath)) {
+        this.info('📧 Starting local email server...');
+        try {
+          await runCommand('npm run email:up', projectRoot);
+        } catch (e: unknown) {
+          this.error(`Failed to start email server: ${e instanceof Error ? e.message : String(e)}`);
+          // Continue anyway
         }
       }
     }

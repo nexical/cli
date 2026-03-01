@@ -32,7 +32,7 @@ export default class BuildCommand extends BaseCommand {
     await envManager.ensureEnv(projectRoot);
 
     // Load root .env into CLI process early to ensure variables are available for config and apps
-    dotenv.config({ path: path.join(projectRoot, '.env') });
+    dotenv.config({ path: path.join(projectRoot, '.env'), quiet: true });
 
     // 1. Run Nexical CLI setup command
     this.info('⚙️ Running setup command...');
