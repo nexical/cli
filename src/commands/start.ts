@@ -7,6 +7,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import process from 'node:process';
 import { EnvManager } from '../utils/env-manager.js';
 import dotenv from 'dotenv';
+import killPort from 'kill-port';
 import SetupCommand from './setup.js';
 
 export default class StartCommand extends BaseCommand {
@@ -117,6 +118,17 @@ export default class StartCommand extends BaseCommand {
     }
 
     this.info(`✨ Starting ${apps.length} applications in parallel...`);
+
+    // Check and kill default ports if in use
+    this.info('🧹 Checking for existing processes on ports 4321 and 4322...');
+    try {
+      // kill-port is not typed, using a local type assertion
+      const kp = killPort as unknown as (port: number | string, protocol?: string) => Promise<void>;
+      await kp(4321, 'tcp');
+      await kp(4322, 'tcp');
+    } catch {
+      // Ignored, port probably not in use
+    }
 
     // Ensure symlinks for all apps before starting
     await envManager.ensureSymlinks(projectRoot, apps);
