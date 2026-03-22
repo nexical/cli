@@ -6,6 +6,30 @@ import { RepositoryProvider, DeploymentContext, HostingProvider, AppConfig } fro
 import { execAsync } from '../utils';
 import { TemplateManager } from '../template-manager';
 
+interface GitHubStep {
+  name?: string;
+  run?: string;
+  env?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+interface GitHubWorkflow {
+  on:
+    | string
+    | {
+        push?: {
+          branches?: string[];
+          paths?: string[];
+        };
+      };
+  jobs: {
+    deploy: {
+      steps: GitHubStep[];
+    };
+    [key: string]: unknown;
+  };
+}
+
 export class GitHubProvider implements RepositoryProvider {
   name = 'github';
   private templateManager = new TemplateManager();
@@ -54,32 +78,31 @@ export class GitHubProvider implements RepositoryProvider {
       const filename = `deploy-${app.name}.yml`;
       const filepath = path.join(workflowsDir, filename);
 
-      const workflow = await this.templateManager.loadWorkflow('github-workflow', {
+      const workflow = (await this.templateManager.loadWorkflow('github-workflow', {
         APP_NAME: app.name,
         PROVIDER_NAME: provider.name,
-      });
+      })) as GitHubWorkflow;
 
       // Update push trigger if paths are specified
       if (app.paths && app.paths.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const workflowAny = workflow as any;
-        if (typeof workflowAny.on === 'string') {
-          workflowAny.on = {
-            push: { branches: [workflowAny.on] },
+        if (typeof workflow.on === 'string') {
+          workflow.on = {
+            push: { branches: [workflow.on] },
           };
         }
-        if (!workflowAny.on.push) {
-          workflowAny.on.push = { branches: ['main'] };
+
+        const onObj = workflow.on as { push?: { branches?: string[]; paths?: string[] } };
+        if (!onObj.push) {
+          onObj.push = { branches: ['main'] };
         }
-        workflowAny.on.push.paths = app.paths;
+        onObj.push.paths = app.paths;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const steps = (workflow as any).jobs.deploy.steps;
+      const steps = workflow.jobs.deploy.steps;
 
       // Build (if applicable)
       if (app.buildCommand) {
-        const buildStep: any = {
+        const buildStep: GitHubStep = {
           name: `Build ${app.name}`,
           run: app.buildCommand,
         };
@@ -114,7 +137,7 @@ export class GitHubProvider implements RepositoryProvider {
       // Provider Deploy Steps
       if (config.deploySteps) {
         for (const step of config.deploySteps) {
-          const deployStep: Record<string, unknown> = {
+          const deployStep: GitHubStep = {
             name: `Deploy ${app.name} to ${provider.name}`,
             run: step,
             'working-directory': app.target || '.',
@@ -138,7 +161,7 @@ export class GitHubProvider implements RepositoryProvider {
 
       // Provider Action Step
       if (config.githubActionStep) {
-        steps.push(config.githubActionStep);
+        steps.push(config.githubActionStep as GitHubStep);
       }
 
       await fs.writeFile(filepath, YAML.stringify(workflow, { lineWidth: 0 }), 'utf-8');

@@ -28,7 +28,9 @@ describe('ModuleAddCommand', () => {
     vi.spyOn(cliCore.logger, 'warn').mockImplementation(() => {});
     vi.spyOn(cliCore.logger, 'info').mockImplementation(() => {});
 
-    command = new ModuleAddCommand({} as unknown as any, { rootDir: projectRoot });
+    command = new ModuleAddCommand({} as unknown as Record<string, unknown>, {
+      rootDir: projectRoot,
+    });
     (command as unknown as { projectRoot: string }).projectRoot = projectRoot;
 
     vi.spyOn(command, 'info').mockImplementation(() => {});
@@ -36,15 +38,13 @@ describe('ModuleAddCommand', () => {
     vi.spyOn(command, 'error').mockImplementation(() => {});
     vi.spyOn(command, 'warn').mockImplementation(() => {});
 
-    (urlResolver.resolveGitUrl as unknown as { mockImplementation: any }).mockImplementation(
-      (url: string) => url,
-    );
-    (fs.ensureDir as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
-    (fs.remove as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
-    (fs.writeFile as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
-    (gitUtils.clone as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
-    (gitUtils.addSubmodule as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
-    (cliCore.runCommand as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
+    vi.mocked(urlResolver.resolveGitUrl).mockImplementation((url: string) => url);
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined as never);
+    vi.mocked(fs.remove).mockResolvedValue(undefined as never);
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined as never);
+    vi.mocked(gitUtils.clone).mockResolvedValue(undefined);
+    vi.mocked(gitUtils.addSubmodule).mockResolvedValue(undefined);
+    vi.mocked(cliCore.runCommand).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -53,19 +53,21 @@ describe('ModuleAddCommand', () => {
 
   it('should install a backend module correctly', async () => {
     const repoUrl = 'https://github.com/org/repo.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('module.yaml')) return true;
       if (pStr.endsWith('models.yaml')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml')) return 'name: my-backend-module\n';
-      if (pStr.includes('nexical.yaml')) return 'modules: {}';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'name: my-backend-module\n';
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        return '';
+      },
+    );
 
     await command.run({ url: repoUrl });
 
@@ -79,19 +81,21 @@ describe('ModuleAddCommand', () => {
 
   it('should install a frontend module correctly', async () => {
     const repoUrl = 'https://github.com/org/ui-repo.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('module.yaml')) return true;
       if (pStr.endsWith('ui.yaml')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml')) return 'name: my-frontend-module\n';
-      if (pStr.includes('nexical.yaml')) return 'modules: {}';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'name: my-frontend-module\n';
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        return '';
+      },
+    );
 
     await command.run({ url: repoUrl });
 
@@ -109,17 +113,17 @@ describe('ModuleAddCommand', () => {
 
   it('should handle module name from package.json', async () => {
     const repoUrl = 'https://github.com/org/pkg-repo.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('package.json')) return true;
       if (pStr.endsWith('models.yaml')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readJson as unknown as { mockResolvedValue: any }).mockResolvedValue({
+    vi.mocked(fs.readJson as unknown as () => Promise<Record<string, unknown>>).mockResolvedValue({
       name: '@modules/pkg-mod',
     });
-    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('modules: {}');
+    vi.mocked(fs.readFile as unknown as () => Promise<string>).mockResolvedValue('modules: {}');
 
     await command.run({ url: repoUrl });
 
@@ -132,13 +136,13 @@ describe('ModuleAddCommand', () => {
 
   it('should fallback to git repo name if no config found', async () => {
     const repoUrl = 'https://github.com/org/fallback-mod.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('models.yaml')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('modules: {}');
+    vi.mocked(fs.readFile as unknown as () => Promise<string>).mockResolvedValue('modules: {}');
 
     await command.run({ url: repoUrl });
 
@@ -151,13 +155,13 @@ describe('ModuleAddCommand', () => {
 
   it('should detect frontend module via src/components', async () => {
     const repoUrl = 'https://github.com/org/comp-mod.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.includes('src/components')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('modules: {}');
+    vi.mocked(fs.readFile as unknown as () => Promise<string>).mockResolvedValue('modules: {}');
 
     await command.run({ url: repoUrl });
 
@@ -170,18 +174,20 @@ describe('ModuleAddCommand', () => {
 
   it('should skip already visited modules', async () => {
     const repoUrl = 'https://github.com/org/cycle.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.includes('staging') && pStr.endsWith('module.yaml')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml'))
-        return 'name: cycle\ndependencies:\n  - https://github.com/org/cycle.git';
-      return 'modules: {}';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml'))
+          return 'name: cycle\ndependencies:\n  - https://github.com/org/cycle.git';
+        return 'modules: {}';
+      },
+    );
 
     await command.run({ url: repoUrl });
 
@@ -193,24 +199,26 @@ describe('ModuleAddCommand', () => {
     const depUrl = 'https://github.com/org/dep.git';
     let callCount = 0;
 
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.includes('staging') && pStr.endsWith('module.yaml')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.includes('staging') && pStr.endsWith('module.yaml')) {
-        if (callCount === 0) {
-          callCount++;
-          return `name: root\ndependencies:\n  - ${depUrl}`;
-        } else {
-          return 'name: dep';
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.includes('staging') && pStr.endsWith('module.yaml')) {
+          if (callCount === 0) {
+            callCount++;
+            return `name: root\ndependencies:\n  - ${depUrl}`;
+          } else {
+            return 'name: dep';
+          }
         }
-      }
-      return 'modules: {}';
-    });
+        return 'modules: {}';
+      },
+    );
 
     await command.run({ url: rootUrl });
 
@@ -228,21 +236,21 @@ describe('ModuleAddCommand', () => {
 
   it('should throw error on dependency conflict', async () => {
     const repoUrl = 'https://github.com/org/conflict.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.includes('apps/backend/modules/conflict')) return true;
       if (pStr.includes('staging') && pStr.endsWith('module.yaml')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml')) return 'name: conflict';
-      return 'modules: {}';
-    });
-    (gitUtils.getRemoteUrl as unknown as { mockResolvedValue: any }).mockResolvedValue(
-      'https://github.com/org/other.git',
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'name: conflict';
+        return 'modules: {}';
+      },
     );
+    vi.mocked(gitUtils.getRemoteUrl).mockResolvedValue('https://github.com/org/other.git');
 
     await command.run({ url: repoUrl });
 
@@ -250,13 +258,13 @@ describe('ModuleAddCommand', () => {
   });
 
   it('should handle missing nexical.yaml', async () => {
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.includes('nexical.yaml')) return false;
       if (pStr.endsWith('module.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('name: mod');
+    vi.mocked(fs.readFile as unknown as () => Promise<string>).mockResolvedValue('name: mod');
 
     await command.run({ url: 'https://github.com/org/mod.git' });
 
@@ -266,33 +274,33 @@ describe('ModuleAddCommand', () => {
   });
 
   it('should handle error during run', async () => {
-    (gitUtils.clone as unknown as { mockRejectedValue: any }).mockRejectedValue(
-      new Error('Git fail'),
-    );
+    vi.mocked(gitUtils.clone).mockRejectedValue(new Error('Git fail'));
     await command.run({ url: 'https://git.com/fail' });
     expect(command.error).toHaveBeenCalledWith(expect.stringContaining('Git fail'));
   });
 
   it('should handle non-Error objects in catch', async () => {
-    (gitUtils.clone as unknown as { mockRejectedValue: any }).mockRejectedValue('String error');
+    vi.mocked(gitUtils.clone).mockRejectedValue('String error');
     await command.run({ url: 'https://git.com/fail' });
     expect(command.error).toHaveBeenCalledWith(expect.stringContaining('String error'));
   });
 
   it('should migrate modules array to object', async () => {
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('module.yaml')) return true;
       if (pStr.endsWith('models.yaml')) return true; // BACKEND
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml')) return 'name: mod\n';
-      if (pStr.includes('nexical.yaml')) return 'modules:\n  - old-mod';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'name: mod\n';
+        if (pStr.includes('nexical.yaml')) return 'modules:\n  - old-mod';
+        return '';
+      },
+    );
 
     await command.run({ url: 'https://github.com/org/mod.git' });
 
@@ -303,23 +311,27 @@ describe('ModuleAddCommand', () => {
   });
 
   it('should handle error during nexical.yaml update', async () => {
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('module.yaml')) return true;
       if (pStr.endsWith('models.yaml')) return true; // BACKEND
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml')) return 'name: mod\n';
-      if (pStr.includes('nexical.yaml')) return 'modules: {}';
-      return '';
-    });
-    (fs.writeFile as any).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.includes('nexical.yaml')) throw new Error('Write fail');
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'name: mod\n';
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        return '';
+      },
+    );
+    vi.mocked(fs.writeFile as unknown as (path: string) => Promise<void>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.includes('nexical.yaml')) throw new Error('Write fail');
+      },
+    );
 
     await command.run({ url: 'https://github.com/org/mod.git' });
     expect(cliCore.logger.warn).toHaveBeenCalledWith(
@@ -328,23 +340,27 @@ describe('ModuleAddCommand', () => {
   });
 
   it('should handle non-Error exception during nexical.yaml update', async () => {
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('module.yaml')) return true;
       if (pStr.endsWith('models.yaml')) return true; // BACKEND
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml')) return 'name: mod\n';
-      if (pStr.includes('nexical.yaml')) return 'modules: {}';
-      return '';
-    });
-    (fs.writeFile as any).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.includes('nexical.yaml')) throw 'String fail';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'name: mod\n';
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        return '';
+      },
+    );
+    vi.mocked(fs.writeFile as unknown as (path: string) => Promise<void>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.includes('nexical.yaml')) throw 'String fail';
+      },
+    );
 
     await command.run({ url: 'https://github.com/org/mod.git' });
     expect(cliCore.logger.warn).toHaveBeenCalledWith(
@@ -353,7 +369,7 @@ describe('ModuleAddCommand', () => {
   });
 
   it('should handle .yml instead of .yaml', async () => {
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('module.yml')) return true;
       if (pStr.endsWith('module.yaml')) return false;
@@ -361,12 +377,14 @@ describe('ModuleAddCommand', () => {
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yml')) return 'name: yml-mod\n';
-      if (pStr.includes('nexical.yaml')) return 'modules: {}';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yml')) return 'name: yml-mod\n';
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        return '';
+      },
+    );
 
     await command.run({ url: 'https://github.com/org/yml.git' });
     expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
@@ -377,7 +395,7 @@ describe('ModuleAddCommand', () => {
   });
 
   it('should handle dependencies as object', async () => {
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (
         pStr.endsWith('module.yaml') ||
@@ -388,18 +406,20 @@ describe('ModuleAddCommand', () => {
       return false;
     });
     let firstCall = true;
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml')) {
-        if (firstCall) {
-          firstCall = false;
-          return 'name: obj-mod\ndependencies:\n  https://github.com/org/dep.git: latest';
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) {
+          if (firstCall) {
+            firstCall = false;
+            return 'name: obj-mod\ndependencies:\n  https://github.com/org/dep.git: latest';
+          }
+          return 'name: dep-mod';
         }
-        return 'name: dep-mod';
-      }
-      if (pStr.includes('nexical.yaml')) return 'modules: {}';
-      return '';
-    });
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        return '';
+      },
+    );
 
     await command.run({ url: 'https://github.com/org/obj.git' });
     expect(gitUtils.addSubmodule).toHaveBeenCalledWith(
@@ -410,55 +430,63 @@ describe('ModuleAddCommand', () => {
   });
 
   it('should handle already installed module with matching remote', async () => {
-    (fs.pathExists as any).mockImplementation((p: string) => true);
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      const pStr = p.toString();
-      if (pStr.endsWith('module.yaml')) return 'name: existing-mod\n';
-      if (pStr.includes('nexical.yaml')) return 'modules: {}';
-      return '';
-    });
-    (gitUtils.getRemoteUrl as any).mockResolvedValue('https://github.com/org/existing-mod.git');
+    vi.mocked(fs.pathExists).mockImplementation(async () => true);
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'name: existing-mod\n';
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        return '';
+      },
+    );
+    vi.mocked(gitUtils.getRemoteUrl).mockResolvedValue('https://github.com/org/existing-mod.git');
 
     await command.run({ url: 'https://github.com/org/existing-mod.git' });
     expect(command.info).toHaveBeenCalledWith(expect.stringContaining('already installed'));
   });
   it('should initialize modules object if missing from config', async () => {
-    (fs.pathExists as unknown as { mockResolvedValue: any }).mockResolvedValue(true);
-    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('key: value');
+    vi.mocked(fs.pathExists as unknown as (path: string) => Promise<boolean>).mockResolvedValue(
+      true,
+    );
+    vi.mocked(fs.readFile as unknown as () => Promise<string>).mockResolvedValue('key: value');
 
     // Mock getModuleConfig via urlResolver logic or direct fs mocks if urlResolver calls fs
     // command.installModule -> ...
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.includes('nexical.yaml')) return true;
-      if (p.endsWith('module.yaml')) return true;
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
+      const pStr = p.toString();
+      if (pStr.includes('nexical.yaml')) return true;
+      if (pStr.endsWith('module.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.includes('nexical.yaml')) return '';
-      if (p.endsWith('module.yaml')) return 'name: new-mod\n';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.includes('nexical.yaml')) return '';
+        if (pStr.endsWith('module.yaml')) return 'name: new-mod\n';
+        return '';
+      },
+    );
 
     await command.run({ url: 'http://example.com/mod.git' });
 
     expect(fs.writeFile).toHaveBeenCalled();
-    const writeCall = (fs.writeFile as any).mock.calls[0];
+    const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
     expect(writeCall[1]).toContain('modules:');
     expect(writeCall[1]).toContain('backend:');
     expect(writeCall[1]).toContain('new-mod');
   });
   it('should handle module name from package.json without scope', async () => {
     const repoUrl = 'https://github.com/org/noscope-repo.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('package.json')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readJson as unknown as { mockResolvedValue: any }).mockResolvedValue({
+    vi.mocked(fs.readJson as unknown as () => Promise<Record<string, unknown>>).mockResolvedValue({
       name: 'noscope-mod',
     });
-    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('modules: {}');
+    vi.mocked(fs.readFile as unknown as () => Promise<string>).mockResolvedValue('modules: {}');
 
     await command.run({ url: repoUrl });
 
@@ -471,14 +499,16 @@ describe('ModuleAddCommand', () => {
 
   it('should handle package.json without name', async () => {
     const repoUrl = 'https://github.com/org/noname-repo.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('package.json')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readJson as unknown as { mockResolvedValue: any }).mockResolvedValue({});
-    (fs.readFile as unknown as { mockResolvedValue: any }).mockResolvedValue('modules: {}');
+    vi.mocked(fs.readJson as unknown as () => Promise<Record<string, unknown>>).mockResolvedValue(
+      {},
+    );
+    vi.mocked(fs.readFile as unknown as () => Promise<string>).mockResolvedValue('modules: {}');
 
     await command.run({ url: repoUrl });
 
@@ -490,16 +520,20 @@ describe('ModuleAddCommand', () => {
   });
 
   it('should skip adding if already in nexical.yaml', async () => {
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.includes('nexical.yaml')) return true;
-      if (p.endsWith('module.yaml')) return true;
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
+      const pStr = p.toString();
+      if (pStr.includes('nexical.yaml')) return true;
+      if (pStr.endsWith('module.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.includes('nexical.yaml')) return 'modules:\n  backend:\n    - existing';
-      if (p.endsWith('module.yaml')) return 'name: existing\n';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.includes('nexical.yaml')) return 'modules:\n  backend:\n    - existing';
+        if (pStr.endsWith('module.yaml')) return 'name: existing\n';
+        return '';
+      },
+    );
 
     await command.run({ url: 'http://example.com/existing.git' });
 
@@ -507,17 +541,20 @@ describe('ModuleAddCommand', () => {
   });
   it('should handle missing name in module.yaml', async () => {
     const repoUrl = 'https://github.com/org/noname-yaml.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('module.yaml')) return true;
       if (pStr.includes('nexical.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.endsWith('module.yaml')) return 'version: 1.0.0\n'; // name missing
-      if (p.includes('nexical.yaml')) return 'modules: {}';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'version: 1.0.0\n'; // name missing
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        return '';
+      },
+    );
 
     await command.run({ url: repoUrl });
 
@@ -531,16 +568,20 @@ describe('ModuleAddCommand', () => {
   it('should handle subpath in url', async () => {
     const repoUrl = 'https://github.com/org/repo.git';
     const subpath = 'my/sub';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.includes('nexical.yaml')) return true;
-      if (p.endsWith('module.yaml')) return true;
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
+      const pStr = p.toString();
+      if (pStr.includes('nexical.yaml')) return true;
+      if (pStr.endsWith('module.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.includes('nexical.yaml')) return 'modules: {}';
-      if (p.endsWith('module.yaml')) return 'name: sub-mod\n';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        if (pStr.endsWith('module.yaml')) return 'name: sub-mod\n';
+        return '';
+      },
+    );
 
     await command.run({ url: `${repoUrl}//${subpath}` });
 
@@ -553,16 +594,20 @@ describe('ModuleAddCommand', () => {
   });
   it('should handle url without subpath explicitly', async () => {
     const repoUrl = 'https://github.com/org/nosub.git';
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.includes('nexical.yaml')) return true;
-      if (p.endsWith('module.yaml')) return true;
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
+      const pStr = p.toString();
+      if (pStr.includes('nexical.yaml')) return true;
+      if (pStr.endsWith('module.yaml')) return true;
       return false;
     });
-    (fs.readFile as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
-      if (p.includes('nexical.yaml')) return 'modules: {}';
-      if (p.endsWith('module.yaml')) return 'name: nosub-mod\n';
-      return '';
-    });
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.includes('nexical.yaml')) return 'modules: {}';
+        if (pStr.endsWith('module.yaml')) return 'name: nosub-mod\n';
+        return '';
+      },
+    );
 
     await command.run({ url: repoUrl });
 
@@ -577,7 +622,7 @@ describe('ModuleAddCommand', () => {
 
     // We must ensure that targetDir (apps/backend/modules/dep-obj) does NOT exist for initial call
     // and ALSO for some-dep if we want to see install logs.
-    (fs.pathExists as any).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.includes('nexical.yaml')) return true;
       if (pStr.includes('module.yaml')) return true;
@@ -585,7 +630,9 @@ describe('ModuleAddCommand', () => {
       return false;
     });
 
-    (fs.readFile as any).mockImplementation((p: string) => {
+    vi.mocked(
+      fs.readFile as unknown as (path: string | Buffer | number) => Promise<string>,
+    ).mockImplementation(async (p: string | Buffer | number) => {
       const pStr = p.toString();
       if (pStr.endsWith('module.yaml')) {
         if (pStr.includes('staging')) {
@@ -599,9 +646,8 @@ describe('ModuleAddCommand', () => {
     await command.run({ url: repoUrl });
 
     // Check if error was called which might explain failure
-    if ((command.error as any).mock.calls.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log('COMMAND ERROR:', (command.error as any).mock.calls[0][0]);
+    if (vi.mocked(command.error).mock.calls.length > 0) {
+      cliCore.logger.info(`COMMAND ERROR: ${String(vi.mocked(command.error).mock.calls[0][0])}`);
     }
 
     expect(command.info).toHaveBeenCalledWith(expect.stringContaining('Resolving 1 dependencies'));
@@ -609,15 +655,19 @@ describe('ModuleAddCommand', () => {
 
   it('should handle already installed module with matching remote', async () => {
     const repoUrl = 'https://github.com/org/match.git';
-    (fs.pathExists as any).mockImplementation((p: string) => {
-      if (p.includes('apps/backend/modules/match')) return true;
-      return true;
-    });
-    (fs.readFile as any).mockImplementation((p: string) => {
-      if (p.endsWith('module.yaml')) return 'name: match\n';
-      return 'modules: {}';
-    });
-    (gitUtils.getRemoteUrl as any).mockResolvedValue('https://github.com/org/match.git');
+    vi.mocked(fs.pathExists as unknown as (path: string) => Promise<boolean>).mockImplementation(
+      async (p: string) => {
+        if (p.includes('apps/backend/modules/match')) return true;
+        return true;
+      },
+    );
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string) => {
+        if (p.endsWith('module.yaml')) return 'name: match\n';
+        return 'modules: {}';
+      },
+    );
+    vi.mocked(gitUtils.getRemoteUrl).mockResolvedValue('https://github.com/org/match.git');
 
     await command.run({ url: repoUrl });
     expect(command.info).toHaveBeenCalledWith(expect.stringContaining('already installed'));
@@ -625,12 +675,17 @@ describe('ModuleAddCommand', () => {
 
   it('should handle already installed module with empty remote', async () => {
     const repoUrl = 'https://github.com/org/empty-rem.git';
-    (fs.pathExists as any).mockImplementation((p: string) => true);
-    (fs.readFile as any).mockImplementation((p: string) => {
-      if (p.endsWith('module.yaml')) return 'name: empty-rem\n';
-      return 'modules: {}';
-    });
-    (gitUtils.getRemoteUrl as any).mockResolvedValue('');
+    vi.mocked(fs.pathExists as unknown as (path: string) => Promise<boolean>).mockImplementation(
+      async () => true,
+    );
+    vi.mocked(fs.readFile as unknown as (path: string) => Promise<string>).mockImplementation(
+      async (p: string | Buffer | number) => {
+        const pStr = p.toString();
+        if (pStr.endsWith('module.yaml')) return 'name: empty-rem\n';
+        return 'modules: {}';
+      },
+    );
+    vi.mocked(gitUtils.getRemoteUrl).mockResolvedValue('');
 
     await command.run({ url: repoUrl });
     expect(command.info).toHaveBeenCalledWith(expect.stringContaining('already installed'));

@@ -19,7 +19,7 @@ export async function clone(
     logger.debug(`Git clone (anonymous): ${url} to ${destination}`);
     const { stdout } = await execAsync(cmd, { cwd: destination });
     if (stdout) {
-      console.log(stdout);
+      logger.info(stdout);
     }
     return;
   } catch (e) {
@@ -59,7 +59,7 @@ export async function addSubmodule(url: string, path: string, cwd: string): Prom
     logger.debug(`Git submodule add (anonymous): ${url} to ${path}`);
     const { stdout } = await execAsync(cmd, { cwd });
     if (stdout) {
-      console.log(stdout);
+      logger.info(stdout);
     }
     return;
   } catch (e) {

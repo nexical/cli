@@ -11,7 +11,7 @@ vi.mock('@nexical/cli-core', async (importOriginal) => {
   return {
     ...mod,
     runCommand: vi.fn(),
-    logger: { code: vi.fn(), debug: vi.fn() },
+    logger: { code: vi.fn(), debug: vi.fn(), info: vi.fn() },
   };
 });
 
@@ -23,21 +23,23 @@ vi.mock('node:util', async () => {
   const actual = await vi.importActual<typeof import('node:util')>('node:util');
   return {
     ...actual,
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-    promisify: (fn: Function) => {
+    promisify: (fn: (...args: unknown[]) => void) => {
       return (...args: unknown[]) =>
         new Promise((resolve, reject) => {
-          fn(...args, (err: Error | null, ...values: unknown[]) => {
-            if (err) return reject(err);
-            // Handle exec-like signature (stdout, stderr) -> { stdout, stderr }
-            // Simple heuristic: if values.length > 1, assume explicit mapping needed?
-            // Or just hardcode for our known usage (exec).
-            if (values.length >= 2) {
-              resolve({ stdout: values[0], stderr: values[1] });
-            } else {
-              resolve(values[0]);
-            }
-          });
+          (fn as (...args: unknown[]) => void)(
+            ...args,
+            (err: Error | null, ...values: unknown[]) => {
+              if (err) return reject(err);
+              // Handle exec-like signature (stdout, stderr) -> { stdout, stderr }
+              // Simple heuristic: if values.length > 1, assume explicit mapping needed?
+              // Or just hardcode for our known usage (exec).
+              if (values.length >= 2) {
+                resolve({ stdout: values[0], stderr: values[1] });
+              } else {
+                resolve(values[0]);
+              }
+            },
+          );
         });
     },
   };
@@ -117,13 +119,21 @@ describe('git utils', () => {
   it('should get remote url', async () => {
     // Mock exec to call the callback with success
 
-    mocks.exec.mockImplementation(((cmd: string, options: unknown, callback: unknown) => {
+    mocks.exec.mockImplementation(((
+      cmd: string,
+      options:
+        | Record<string, unknown>
+        | ((err: Error | null, stdout: string, stderr: string) => void),
+      callback?: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      let cb: (err: Error | null, stdout: string, stderr: string) => void;
       if (typeof options === 'function') {
-        callback = options;
-        options = {};
+        cb = options;
+      } else {
+        cb = callback!;
       }
       // callback(error, stdout, stderr)
-      callback(null, 'https://github.com/origin.git\n', '');
+      cb(null, 'https://github.com/origin.git\n', '');
 
       return {} as unknown as never; // exec returns a ChildProcess
     }) as unknown as never);
@@ -140,9 +150,20 @@ describe('git utils', () => {
   it('should return empty string on getRemoteUrl failure', async () => {
     // Mock exec to call the callback with error
 
-    mocks.exec.mockImplementation(((cmd: string, options: unknown, callback: unknown) => {
-      if (typeof options === 'function') callback = options;
-      callback(new Error('fail'), '', '');
+    mocks.exec.mockImplementation(((
+      cmd: string,
+      options:
+        | Record<string, unknown>
+        | ((err: Error | null, stdout: string, stderr: string) => void),
+      callback?: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      let cb: (err: Error | null, stdout: string, stderr: string) => void;
+      if (typeof options === 'function') {
+        cb = options;
+      } else {
+        cb = callback!;
+      }
+      cb(new Error('fail'), '', '');
 
       return {} as unknown as never;
     }) as unknown as never);
@@ -223,9 +244,20 @@ it('should remove remote', async () => {
 it('should check if branch exists', async () => {
   // Mock success
 
-  mocks.exec.mockImplementation(((cmd: string, options: unknown, callback: unknown) => {
-    if (typeof options === 'function') callback = options;
-    callback(null, '', '');
+  mocks.exec.mockImplementation(((
+    cmd: string,
+    options:
+      | Record<string, unknown>
+      | ((err: Error | null, stdout: string, stderr: string) => void),
+    callback?: (err: Error | null, stdout: string, stderr: string) => void,
+  ) => {
+    let cb: (err: Error | null, stdout: string, stderr: string) => void;
+    if (typeof options === 'function') {
+      cb = options;
+    } else {
+      cb = callback!;
+    }
+    cb(null, '', '');
 
     return {} as unknown as never;
   }) as unknown as never);
@@ -239,9 +271,20 @@ it('should check if branch exists', async () => {
 
   // Mock failure
 
-  mocks.exec.mockImplementation(((cmd: string, options: unknown, callback: unknown) => {
-    if (typeof options === 'function') callback = options;
-    callback(new Error('fail'), '', '');
+  mocks.exec.mockImplementation(((
+    cmd: string,
+    options:
+      | Record<string, unknown>
+      | ((err: Error | null, stdout: string, stderr: string) => void),
+    callback?: (err: Error | null, stdout: string, stderr: string) => void,
+  ) => {
+    let cb: (err: Error | null, stdout: string, stderr: string) => void;
+    if (typeof options === 'function') {
+      cb = options;
+    } else {
+      cb = callback!;
+    }
+    cb(new Error('fail'), '', '');
 
     return {} as unknown as never;
   }) as unknown as never);
