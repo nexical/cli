@@ -309,52 +309,57 @@ export class RailwayProvider implements HostingProvider {
       processEnv.RAILWAY_API_TOKEN = token;
     }
 
-    // Fetch project and service IDs from the application's linked directory
-    const statusData = await execAsync('railway status --json', {
-      cwd: appDir,
-      env: processEnv,
-    }).catch(() => ({ stdout: '{}' }));
-    const statusJson = JSON.parse(
-      (statusData as { stdout: string }).stdout || '{}',
-    ) as RailwayStatusJson;
-    const projectId = statusJson.id;
-    const existingServices: RailwayServiceNode[] =
-      statusJson.services?.edges?.map((edge) => edge.node) ?? [];
-    const mainService = existingServices.find(
-      (s) => s.name?.toLowerCase() === app.name.toLowerCase(),
-    );
-    const serviceId = mainService?.id || app.name;
-
-    if (!projectId) {
-      throw new Error(
-        `No linked Railway project found in ${appDir}. Please run 'nexical deploy' without '--manual' first or ensure the project is provisioned.`,
+    try {
+      // Fetch project and service IDs from the application's linked directory
+      const statusData = await execAsync('railway status --json', {
+        cwd: appDir,
+        env: processEnv,
+      }).catch(() => ({ stdout: '{}' }));
+      const statusJson = JSON.parse(
+        (statusData as { stdout: string }).stdout || '{}',
+      ) as RailwayStatusJson;
+      const projectId = statusJson.id;
+      const existingServices: RailwayServiceNode[] =
+        statusJson.services?.edges?.map((edge) => edge.node) ?? [];
+      const mainService = existingServices.find(
+        (s) => s.name?.toLowerCase() === app.name.toLowerCase(),
       );
-    }
+      const serviceId = mainService?.id || app.name;
 
-    const deployCmd = `railway up --detach --project ${projectId} --service ${serviceId} --environment "${environment}"`;
+      if (!projectId) {
+        throw new Error(
+          `No linked Railway project found in ${appDir}. Please run 'nexical deploy' without '--manual' first or ensure the project is provisioned.`,
+        );
+      }
 
-    if (context.options.dryRun) {
-      logger.info(`[Dry Run] Would run: ${deployCmd}`);
-      logger.info(`[Dry Run] Execution directory: ${context.cwd}`);
-      return;
-    }
-    await execAsync(deployCmd, {
-      cwd: context.cwd, // Execute from root to provide monorepo context
-      env: processEnv,
-    });
+      const deployCmd = `railway up --detach --project ${projectId} --service ${serviceId} --environment "${environment}"`;
 
-    // Ensure domains are linked after deployment (Execution phase)
-    if (app.domain) {
-      await this.ensureDomainsLinked(context, app, {
-        targetDir: appDir,
-        processEnv,
-        phase: 'deploy',
-        serviceId,
-        environment,
+      if (context.options.dryRun) {
+        logger.info(`[Dry Run] Would run: ${deployCmd}`);
+        logger.info(`[Dry Run] Execution directory: ${context.cwd}`);
+        return;
+      }
+      await execAsync(deployCmd, {
+        cwd: context.cwd, // Execute from root to provide monorepo context
+        env: processEnv,
       });
-    }
 
-    logger.success(`Successfully deployed ${app.name} to Railway.`);
+      // Ensure domains are linked after deployment (Execution phase)
+      if (app.domain) {
+        await this.ensureDomainsLinked(context, app, {
+          targetDir: appDir,
+          processEnv,
+          phase: 'deploy',
+          serviceId,
+          environment,
+        });
+      }
+
+      logger.success(`Successfully deployed ${app.name} to Railway.`);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      logger.error(`Railway deployment failed: ${message}`);
+    }
   }
 
   private async ensureDomainsLinked(

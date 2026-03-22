@@ -95,7 +95,7 @@ describe('GitHubProvider', () => {
           },
           app: { name: 'rw', provider: 'railway' },
         },
-      ] as unknown as any;
+      ] as unknown as never;
 
       await provider.generateWorkflow(mockContext, targets);
 
@@ -117,7 +117,7 @@ describe('GitHubProvider', () => {
             paths: ['apps/frontend/**'],
           },
         },
-      ] as unknown as any;
+      ] as unknown as never;
 
       await provider.generateWorkflow(mockContext, targets);
 
@@ -130,6 +130,140 @@ describe('GitHubProvider', () => {
     it('should skip if no targets provided', async () => {
       await provider.generateWorkflow(mockContext, []);
       expect(fs.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('should handle buildCommand and environment', async () => {
+      const targets = [
+        {
+          provider: {
+            name: 'h1',
+            getCIConfig: () => ({}),
+          },
+          app: {
+            name: 'app1',
+            provider: 'h1',
+            buildCommand: 'npm run build',
+            domain: 'app1.com',
+            env: { CUSTOM: 'VAL' },
+          },
+        },
+      ] as unknown as never;
+
+      await provider.generateWorkflow(mockContext, targets);
+
+      const content = (fs.writeFile as Mock).mock.calls[0][1];
+      expect(content).toContain('run: npm run build');
+      expect(content).toContain('SITE: https://app1.com');
+      expect(content).toContain('CUSTOM: VAL');
+    });
+
+    it('should handle secrets in deploy steps', async () => {
+      const targets = [
+        {
+          provider: {
+            name: 'h1',
+            getCIConfig: () => ({
+              deploySteps: ['deploy --token ${{ secrets.TOKEN }}'],
+              secrets: ['TOKEN'],
+            }),
+          },
+          app: {
+            name: 'app1',
+            provider: 'h1',
+            secrets: { EXTRA: 'VAL' },
+          },
+        },
+      ] as unknown as never;
+
+      await provider.generateWorkflow(mockContext, targets);
+
+      const content = (fs.writeFile as Mock).mock.calls[0][1];
+      expect(content).toContain('EXTRA: ${{ secrets.EXTRA }}');
+      expect(content).toContain('TOKEN: ${{ secrets.TOKEN }}');
+    });
+
+    it('should handle string "on" trigger in template', async () => {
+      (fs.readFile as Mock).mockResolvedValue(
+        'name: ${APP_NAME}\non: main\njobs:\n  deploy:\n    steps: []',
+      );
+      const targets = [
+        {
+          provider: { name: 'h', getCIConfig: () => ({}) },
+          app: { name: 'a', paths: ['p'] },
+        },
+      ] as unknown as never;
+      await provider.generateWorkflow(mockContext, targets);
+      const content = (fs.writeFile as Mock).mock.calls[0][1];
+      expect(content).toContain('push:');
+      expect(content).toContain('branches:');
+      expect(content).toContain('- main');
+    });
+    it('should add default push branches if missing from template', async () => {
+      (fs.readFile as Mock).mockResolvedValue(
+        'name: ${APP_NAME}\non:\n  pull_request: {}\njobs:\n  deploy:\n    steps: []',
+      );
+      const targets = [
+        {
+          provider: { name: 'h', getCIConfig: () => ({}) },
+          app: { name: 'a', paths: ['p'] },
+        },
+      ] as unknown as never;
+      await provider.generateWorkflow(mockContext, targets);
+      const content = (fs.writeFile as Mock).mock.calls[0][1];
+      expect(content).toContain('push:');
+      expect(content).toContain('branches:');
+      expect(content).toContain('- main');
+      expect(content).toContain('paths:');
+      expect(content).toContain('- p');
+    });
+    describe('generateWorkflow branches', () => {
+      it('should skip if config is missing', async () => {
+        const targets = [
+          {
+            provider: { name: 'h', getCIConfig: () => undefined },
+            app: { name: 'a' },
+          },
+        ] as unknown as never;
+        await provider.generateWorkflow(mockContext, targets);
+        expect(fs.writeFile).not.toHaveBeenCalled();
+      });
+
+      it('should handle missing domain in buildCommand branch', async () => {
+        const targets = [
+          {
+            provider: { name: 'h', getCIConfig: () => ({}) },
+            app: { name: 'a', buildCommand: 'build' },
+            // No domain
+          },
+        ] as unknown as never;
+        await provider.generateWorkflow(mockContext, targets);
+        const content = (fs.writeFile as Mock).mock.calls[0][1];
+        expect(content).not.toContain('SITE:');
+      });
+
+      it('should handle domain as an array in generateWorkflow', async () => {
+        const targets = [
+          {
+            provider: { name: 'h', getCIConfig: () => ({}) },
+            app: { name: 'a', buildCommand: 'build', domain: ['a.com', 'b.com'] },
+          },
+        ] as unknown as never;
+        await provider.generateWorkflow(mockContext, targets);
+        const content = (fs.writeFile as Mock).mock.calls[0][1];
+        expect(content).toContain('SITE: https://a.com');
+      });
+
+      it('should handle empty config secrets', async () => {
+        const targets = [
+          {
+            provider: { name: 'h', getCIConfig: () => ({ deploySteps: ['deploy'] }) }, // No secrets array
+            app: { name: 'a' },
+          },
+        ] as unknown as never;
+        await provider.generateWorkflow(mockContext, targets);
+        const content = (fs.writeFile as Mock).mock.calls[0][1];
+        expect(content).not.toContain('env:');
+      });
     });
   });
 });

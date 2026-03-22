@@ -25,11 +25,9 @@ vi.mock('node:util', async () => {
     ...actual,
     // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
     promisify: (fn: Function) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (...args: any[]) =>
+      return (...args: unknown[]) =>
         new Promise((resolve, reject) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          fn(...args, (err: Error | null, ...values: any[]) => {
+          fn(...args, (err: Error | null, ...values: unknown[]) => {
             if (err) return reject(err);
             // Handle exec-like signature (stdout, stderr) -> { stdout, stderr }
             // Simple heuristic: if values.length > 1, assume explicit mapping needed?
@@ -96,8 +94,7 @@ describe('git utils', () => {
 
   it('should handle anonymous clone with non-Error exception', async () => {
     mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      callback('String error' as any, '', '');
+      callback('String error' as unknown as never, '', '');
     });
 
     await git.clone('http://repo.git', 'dest');
@@ -119,18 +116,17 @@ describe('git utils', () => {
 
   it('should get remote url', async () => {
     // Mock exec to call the callback with success
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mocks.exec.mockImplementation(((cmd: string, options: any, callback: any) => {
+
+    mocks.exec.mockImplementation(((cmd: string, options: unknown, callback: unknown) => {
       if (typeof options === 'function') {
         callback = options;
         options = {};
       }
       // callback(error, stdout, stderr)
       callback(null, 'https://github.com/origin.git\n', '');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return {} as any; // exec returns a ChildProcess
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }) as any);
+
+      return {} as unknown as never; // exec returns a ChildProcess
+    }) as unknown as never);
 
     const url = await git.getRemoteUrl('cwd');
     expect(url).toBe('https://github.com/origin.git');
@@ -143,14 +139,13 @@ describe('git utils', () => {
 
   it('should return empty string on getRemoteUrl failure', async () => {
     // Mock exec to call the callback with error
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mocks.exec.mockImplementation(((cmd: string, options: any, callback: any) => {
+
+    mocks.exec.mockImplementation(((cmd: string, options: unknown, callback: unknown) => {
       if (typeof options === 'function') callback = options;
       callback(new Error('fail'), '', '');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return {} as any;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }) as any);
+
+      return {} as unknown as never;
+    }) as unknown as never);
 
     const url = await git.getRemoteUrl('cwd');
     expect(url).toBe('');
@@ -192,8 +187,7 @@ describe('git utils', () => {
 
   it('should handle anonymous submodule add with non-Error exception', async () => {
     mocks.exec.mockImplementationOnce((_cmd, _options, callback) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      callback('String error' as any, '', '');
+      callback('String error' as unknown as never, '', '');
     });
 
     await git.addSubmodule('url', 'path', 'cwd');
@@ -228,14 +222,13 @@ it('should remove remote', async () => {
 
 it('should check if branch exists', async () => {
   // Mock success
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mocks.exec.mockImplementation(((cmd: string, options: any, callback: any) => {
+
+  mocks.exec.mockImplementation(((cmd: string, options: unknown, callback: unknown) => {
     if (typeof options === 'function') callback = options;
     callback(null, '', '');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return {} as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }) as any);
+
+    return {} as unknown as never;
+  }) as unknown as never);
 
   expect(await git.branchExists('branch', 'cwd')).toBe(true);
   expect(mocks.exec).toHaveBeenCalledWith(
@@ -245,14 +238,13 @@ it('should check if branch exists', async () => {
   );
 
   // Mock failure
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mocks.exec.mockImplementation(((cmd: string, options: any, callback: any) => {
+
+  mocks.exec.mockImplementation(((cmd: string, options: unknown, callback: unknown) => {
     if (typeof options === 'function') callback = options;
     callback(new Error('fail'), '', '');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return {} as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }) as any);
+
+    return {} as unknown as never;
+  }) as unknown as never);
 
   expect(await git.branchExists('branch', 'cwd')).toBe(false);
 });

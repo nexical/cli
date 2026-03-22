@@ -110,6 +110,38 @@ describe('ProviderRegistry', () => {
       ).registerProviderFromModule(mockModule, 'static');
       expect(registry.getHostingProvider('static')).toBeUndefined();
     });
+
+    it('should register a valid DNS provider', () => {
+      const MockProvider = {
+        name: 'valid-dns',
+        type: 'dns' as const,
+        provision: vi.fn(),
+      };
+      (
+        registry as unknown as { registerProviderFromModule: (mod: unknown, name: string) => void }
+      ).registerProviderFromModule({ default: MockProvider }, 'test');
+      expect(registry.getDnsProvider('valid-dns')).toBeDefined();
+    });
+
+    it('should handle non-function provider object', () => {
+      const mockProvider = { name: 'obj-provider', provision: () => {}, getCIConfig: () => {} };
+      (
+        registry as unknown as { registerProviderFromModule: (mod: unknown, name: string) => void }
+      ).registerProviderFromModule({ default: mockProvider }, 'test');
+      expect(registry.getHostingProvider('obj-provider')).toBeDefined();
+    });
+
+    it('should find provider in named exports loop', () => {
+      const MockProvider = class {
+        name = 'named-loop';
+        provision() {}
+        getCIConfig() {}
+      };
+      (
+        registry as unknown as { registerProviderFromModule: (mod: unknown, name: string) => void }
+      ).registerProviderFromModule({ foo: 'bar', baz: MockProvider }, 'test');
+      expect(registry.getHostingProvider('named-loop')).toBeDefined();
+    });
   });
 
   describe('loadCoreProviders', () => {
@@ -121,7 +153,7 @@ describe('ProviderRegistry', () => {
       const mockProviderPath = path.join(dirname, 'mock.js');
 
       vi.spyOn(fs, 'access').mockResolvedValue(undefined);
-      vi.spyOn(fs, 'readdir').mockResolvedValue(['mock.js'] as unknown as any);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['mock.js'] as unknown as never);
 
       // Mock the specific file that registry will import
       vi.doMock(mockProviderPath, () => ({
@@ -158,7 +190,7 @@ describe('ProviderRegistry', () => {
 
     it('should warn if loading a provider fails', async () => {
       vi.spyOn(fs, 'access').mockResolvedValue(undefined);
-      vi.spyOn(fs, 'readdir').mockResolvedValue(['bad.js'] as unknown as any);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['bad.js'] as unknown as never);
       // We do NOT mock bad.js, so import() should fail
       await registry.loadCoreProviders();
       expect(logger.warn).toHaveBeenCalledWith(
@@ -168,9 +200,9 @@ describe('ProviderRegistry', () => {
 
     it('should ignore non-js/ts files', async () => {
       vi.spyOn(fs, 'access').mockResolvedValue(undefined);
-      vi.spyOn(fs, 'readdir').mockResolvedValue(['README.md', 'type.d.ts'] as unknown as any);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['README.md', 'type.d.ts'] as unknown as never);
       const spy = vi.spyOn(
-        registry as unknown as { registerProviderFromModule: any },
+        registry as unknown as { registerProviderFromModule: (m: unknown, s: string) => void },
         'registerProviderFromModule',
       );
 
@@ -183,7 +215,7 @@ describe('ProviderRegistry', () => {
     it('should load local providers using jiti', async () => {
       const mockRoot = '/mock/root';
       const deployDir = path.join(mockRoot, 'deploy');
-      vi.spyOn(fs, 'readdir').mockResolvedValue(['custom.ts'] as unknown as any);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['custom.ts'] as unknown as never);
 
       mockJitiRequest.mockResolvedValue({
         default: class {
@@ -201,7 +233,7 @@ describe('ProviderRegistry', () => {
 
     it('should ignore non-js/ts files', async () => {
       const mockRoot = '/mock/root';
-      vi.spyOn(fs, 'readdir').mockResolvedValue(['README.md', 'notes.txt'] as any);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['README.md', 'notes.txt'] as unknown as never);
 
       await registry.loadLocalProviders(mockRoot);
       expect(mockJitiRequest).not.toHaveBeenCalled();
@@ -215,7 +247,7 @@ describe('ProviderRegistry', () => {
 
     it('should warn if loading local provider fails', async () => {
       const mockRoot = '/mock/root';
-      vi.spyOn(fs, 'readdir').mockResolvedValue(['broken.ts'] as any);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['broken.ts'] as unknown as never);
       mockJitiRequest.mockRejectedValue(new Error('Jiti fail'));
 
       await registry.loadLocalProviders(mockRoot);
@@ -226,7 +258,7 @@ describe('ProviderRegistry', () => {
 
     it('should handle non-Error exceptions when loading local provider', async () => {
       const mockRoot = '/mock/root';
-      vi.spyOn(fs, 'readdir').mockResolvedValue(['broken.ts'] as any);
+      vi.spyOn(fs, 'readdir').mockResolvedValue(['broken.ts'] as unknown as never);
       mockJitiRequest.mockRejectedValue('String fail');
 
       await registry.loadLocalProviders(mockRoot);

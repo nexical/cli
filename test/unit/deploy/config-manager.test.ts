@@ -2,8 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConfigManager } from '../../../src/deploy/config-manager.js';
 import fs from 'node:fs/promises';
 import { NexicalConfig } from '../../../src/deploy/types.js';
+import { logger } from '@nexical/cli-core';
 
 vi.mock('node:fs/promises');
+vi.mock('@nexical/cli-core', () => ({
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
 
 describe('ConfigManager', () => {
   let manager: ConfigManager;
@@ -28,9 +36,15 @@ describe('ConfigManager', () => {
     expect(config).toEqual(mockConfig);
   });
 
-  it('should return empty object if config missing', async () => {
-    const error = new Error('not found');
-    (error as unknown as { code: string }).code = 'ENOENT';
+  it('should throw error on invalid configuration', async () => {
+    // Missing required provider
+    vi.mocked(fs.readFile).mockResolvedValue('deploy:\n  apps:\n    backend:\n      foo: bar');
+    await expect(manager.load()).rejects.toThrow('Configuration validation failed.');
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  it('should return empty object on ENOENT error', async () => {
+    const error = { code: 'ENOENT' };
     vi.mocked(fs.readFile).mockRejectedValue(error);
     const config = await manager.load();
     expect(config).toEqual({});

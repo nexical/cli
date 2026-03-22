@@ -26,7 +26,13 @@ vi.mock('@nexical/cli-core', async (importOriginal) => {
 vi.mock('fs-extra');
 vi.mock('../../../src/deploy/config-manager.js');
 vi.mock('../../../src/utils/env-manager.js');
-vi.mock('../../../src/commands/setup.js');
+vi.mock('../../../src/commands/setup.js', () => ({
+  __esModule: true,
+  default: class {
+    async init() {}
+    async run() {}
+  },
+}));
 vi.mock('dotenv', () => ({
   default: {
     config: vi.fn(),
@@ -56,8 +62,15 @@ describe('BuildCommand', () => {
     } as NexicalConfig);
 
     // Mock fs-extra
-    vi.mocked(fs.pathExists).mockImplementation(() => Promise.resolve(true));
-    vi.mocked(fs.readJson).mockResolvedValue({ scripts: { build: 'some-build-cmd' } });
+    vi.mocked(fs.pathExists).mockImplementation(
+      () => Promise.resolve(true) as unknown as Promise<boolean>,
+    );
+    vi.mocked(fs.readJson).mockResolvedValue({
+      scripts: { build: 'some-build-cmd' },
+    } as unknown as { scripts: { build: string } });
+
+    vi.spyOn(SetupCommand.prototype, 'init').mockResolvedValue(undefined);
+    vi.spyOn(SetupCommand.prototype, 'run').mockResolvedValue(undefined);
 
     await command.init();
   });
@@ -110,5 +123,39 @@ describe('BuildCommand', () => {
 
     expect(command.warn).toHaveBeenCalledWith(expect.stringContaining('No "build" script found'));
     expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it('should warn and skip if package.json is missing', async () => {
+    vi.mocked(fs.pathExists).mockResolvedValue(false as never);
+
+    await command.run({});
+
+    expect(command.warn).toHaveBeenCalledWith(expect.stringContaining('package.json not found'));
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it('should handle build command errors', async () => {
+    vi.mocked(runCommand).mockRejectedValue(new Error('build error'));
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => {}) as unknown as (
+        code?: string | number | null | undefined,
+      ) => never);
+
+    await command.run({ apps: 'app1' });
+
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to build app1: build error'),
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    // Test non-Error object
+    vi.mocked(runCommand).mockRejectedValue('string error');
+    await command.run({ apps: 'app1' });
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to build app1: string error'),
+    );
+
+    exitSpy.mockRestore();
   });
 });

@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ModuleUpdateCommand from '../../../../src/commands/module/update.js';
 import fs from 'fs-extra';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { runCommand, logger } from '@nexical/cli-core';
+import { runCommand } from '@nexical/cli-core';
 
 // Mocks
 vi.mock('fs-extra');
@@ -24,8 +23,8 @@ describe('ModuleUpdateCommand', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    command = new ModuleUpdateCommand({} as unknown as any, {} as unknown as any);
-    (runCommand as unknown as { mockResolvedValue: any }).mockResolvedValue(undefined);
+    command = new ModuleUpdateCommand({} as never, {} as never);
+    vi.mocked(runCommand).mockResolvedValue(undefined as never);
   });
 
   afterEach(() => {
@@ -42,7 +41,7 @@ describe('ModuleUpdateCommand', () => {
   });
 
   it('should update specific module if name provided', async () => {
-    (fs.pathExists as unknown as { mockImplementation: any }).mockImplementation((p: string) => {
+    vi.mocked(fs.pathExists).mockImplementation((p: string) => {
       return p.includes('apps/frontend/modules/ui-mod');
     });
 
@@ -55,13 +54,13 @@ describe('ModuleUpdateCommand', () => {
   });
 
   it('should error if specific module not found', async () => {
-    (fs.pathExists as unknown as { mockResolvedValue: any }).mockResolvedValue(false);
+    vi.mocked(fs.pathExists).mockResolvedValue(false as never);
     await command.run({ name: 'missing-mod' });
     expect(command.error).toHaveBeenCalledWith('Module missing-mod not found.');
   });
 
   it('should handle error during update', async () => {
-    (runCommand as unknown as { mockRejectedValue: any }).mockRejectedValue(new Error('Git fail'));
+    vi.mocked(runCommand).mockRejectedValue(new Error('Git fail') as never);
     await command.run({});
     expect(command.error).toHaveBeenCalledWith(
       expect.stringContaining('Failed to update modules: Git fail'),
@@ -69,7 +68,7 @@ describe('ModuleUpdateCommand', () => {
   });
 
   it('should handle non-Error exception during update', async () => {
-    (runCommand as unknown as { mockRejectedValue: any }).mockRejectedValue('String error');
+    vi.mocked(runCommand).mockRejectedValue('String error' as never);
     await command.run({});
     expect(command.error).toHaveBeenCalledWith(
       expect.stringContaining('Failed to update modules: String error'),

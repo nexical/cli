@@ -21,7 +21,9 @@ describe('discoverCommandDirectories', () => {
 
   it('should discover core commands', () => {
     const corePath = path.join(root, 'src/commands');
-    vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => p === corePath) as any);
+    vi.mocked(fs.existsSync).mockImplementation(
+      ((p: fs.PathLike) => p === corePath) as unknown as never,
+    );
     const dirs = discoverCommandDirectories(root);
     expect(dirs).toContain(corePath);
   });
@@ -41,7 +43,7 @@ describe('discoverCommandDirectories', () => {
     vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => {
       if (p === corePath || p === distPath) return true;
       return false;
-    }) as any);
+    }) as unknown as never);
     const dirs = discoverCommandDirectories(root);
     expect(dirs).not.toContain(corePath);
   });
@@ -55,11 +57,11 @@ describe('discoverCommandDirectories', () => {
       if (p === modulesRoot) return true;
       if (p === mod1SrcCommands) return true;
       return false;
-    }) as any);
+    }) as unknown as never);
     vi.mocked(fs.readdirSync).mockImplementation(((p: fs.PathLike) => {
       if (p === modulesRoot) return ['mod1'] as unknown as string[];
       return [] as string[];
-    }) as any);
+    }) as unknown as never);
     vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
 
     const dirs = discoverCommandDirectories(root);
@@ -72,13 +74,13 @@ describe('discoverCommandDirectories', () => {
     vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => {
       if ((p as string).includes('dist')) return false;
       return true;
-    }) as any);
+    }) as unknown as never);
 
     const modulesRoot = path.join(root, 'modules');
     vi.mocked(fs.readdirSync).mockImplementation(((p: fs.PathLike) => {
       if (p === modulesRoot) return ['core-link'] as unknown as string[];
       return [] as string[];
-    }) as any);
+    }) as unknown as never);
     vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
 
     const mockModuleSrcPath = path.join(root, 'modules/core-link/src/commands');
@@ -98,7 +100,7 @@ describe('discoverCommandDirectories', () => {
   it('should skip hidden entries and files in module search', () => {
     const modulesRoot = path.join(root, 'modules');
     vi.mocked(fs.existsSync).mockImplementation((p: fs.PathLike) => p === modulesRoot);
-    vi.mocked(fs.readdirSync).mockReturnValue(['.git', 'file.txt'] as any);
+    vi.mocked(fs.readdirSync).mockReturnValue(['.git', 'file.txt'] as unknown as never);
     vi.mocked(fs.statSync).mockImplementation(
       (p: fs.PathLike) =>
         ({
@@ -119,11 +121,11 @@ describe('discoverCommandDirectories', () => {
       if (p === modulesRoot) return true;
       if (p === distCommands) return true;
       return false;
-    }) as any);
+    }) as unknown as never);
     vi.mocked(fs.readdirSync).mockImplementation(((p: fs.PathLike) => {
       if (p === modulesRoot) return ['mod-dist'] as unknown as string[];
       return [] as string[];
-    }) as any);
+    }) as unknown as never);
     vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
 
     const dirs = discoverCommandDirectories(root);
@@ -138,11 +140,11 @@ describe('discoverCommandDirectories', () => {
       if (p === modulesRoot) return true;
       // No dist, no src
       return false;
-    }) as any);
+    }) as unknown as never);
     vi.mocked(fs.readdirSync).mockImplementation(((p: fs.PathLike) => {
       if (p === modulesRoot) return ['mod-empty'] as unknown as string[];
       return [] as string[];
-    }) as any);
+    }) as unknown as never);
     vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
 
     discoverCommandDirectories(root);
@@ -161,7 +163,9 @@ describe('discoverCommandDirectories', () => {
       Object.defineProperty(process, 'execArgv', { value: [], configurable: true });
 
       const corePath = path.join(root, 'src/commands');
-      vi.mocked(fs.existsSync).mockImplementation(((p: fs.PathLike) => p === corePath) as any);
+      vi.mocked(fs.existsSync).mockImplementation(
+        ((p: fs.PathLike) => p === corePath) as unknown as never,
+      );
 
       discoverCommandDirectories(root);
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('no TS loader detected'));

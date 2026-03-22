@@ -17,10 +17,10 @@ describe('git utils', () => {
   it('should call git clone', async () => {
     const { exec } = await import('node:child_process');
     // Mock anonymous failure
-    vi.mocked(exec).mockImplementationOnce(((cmd: string, opts: any, callback: any) => {
+    vi.mocked(exec).mockImplementationOnce(((cmd: string, opts: unknown, callback: unknown) => {
       callback(new Error('fail'), '', '');
-      return {} as any;
-    }) as any);
+      return {} as unknown as never;
+    }) as unknown as never);
 
     await git.clone('url', 'dest');
     expect(runCommand).toHaveBeenCalledWith(expect.stringContaining('git clone'), 'dest');
@@ -35,22 +35,22 @@ describe('git utils', () => {
     const { exec } = await import('node:child_process');
     vi.mocked(exec).mockImplementation(((
       _cmd: string,
-      _opts: any,
+      _opts: unknown,
       callback: (err: Error | null, res: { stdout: string }) => void,
     ) => {
       callback(null, { stdout: '' });
-      return {} as any;
-    }) as any);
+      return {} as unknown as never;
+    }) as unknown as never);
     expect(await git.branchExists('main', 'cwd')).toBe(true);
 
     vi.mocked(exec).mockImplementation(((
       _cmd: string,
-      _opts: any,
+      _opts: unknown,
       callback: (err: Error | null) => void,
     ) => {
       callback(new Error());
-      return {} as any;
-    }) as any);
+      return {} as unknown as never;
+    }) as unknown as never);
     expect(await git.branchExists('main', 'cwd')).toBe(false);
   });
 });

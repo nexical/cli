@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import CloudflareDnsProvider from '../../../../src/deploy/providers/dns-cloudflare';
 import { DeploymentContext } from '../../../../src/deploy/types';
+import { logger } from '@nexical/cli-core';
+
+vi.mock('@nexical/cli-core', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
+  },
+}));
 
 describe('CloudflareDnsProvider', () => {
   let provider: CloudflareDnsProvider;
@@ -143,6 +153,89 @@ describe('CloudflareDnsProvider', () => {
           ttl: 1,
         }),
       }),
+    );
+  });
+
+  it('should throw if fetch records fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: async () => 'Error body',
+    } as unknown as Response);
+
+    await expect(
+      provider.provision(mockContext, [{ type: 'A', name: 'ex.com', content: '1.2.3.4' }]),
+    ).rejects.toThrow(
+      'Failed to fetch Cloudflare DNS records: 500 Internal Server Error - Error body',
+    );
+  });
+
+  it('should throw if Cloudflare API returns success: false', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: false }),
+    } as unknown as Response);
+
+    await expect(
+      provider.provision(mockContext, [{ type: 'A', name: 'ex.com', content: '1.2.3.4' }]),
+    ).rejects.toThrow('Cloudflare API returned success: false');
+  });
+
+  it('should throw if update record fails', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          result: [{ id: 'rec-1', type: 'A', name: 'ex.com', content: 'old', proxied: true }],
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        text: async () => 'Update fail',
+      } as unknown as Response);
+
+    await expect(
+      provider.provision(mockContext, [{ type: 'A', name: 'ex.com', content: 'new' }]),
+    ).rejects.toThrow('Failed to update DNS record ex.com: Update fail');
+  });
+
+  it('should throw if create record fails', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, result: [] }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        text: async () => 'Create fail',
+      } as unknown as Response);
+
+    await expect(
+      provider.provision(mockContext, [{ type: 'A', name: 'ex.com', content: '1.2.3.4' }]),
+    ).rejects.toThrow('Failed to create DNS record ex.com: Create fail');
+  });
+
+  it('should skip if record is up to date', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        result: [{ id: 'rec-1', type: 'A', name: 'ex.com', content: '1.2.3.4', proxied: true }],
+      }),
+    } as unknown as Response);
+
+    await provider.provision(mockContext, [{ type: 'A', name: 'ex.com', content: '1.2.3.4' }]);
+    expect(fetch).toHaveBeenCalledTimes(1); // Only GET
+  });
+
+  it('should handle dry run', async () => {
+    mockContext.options.dryRun = true;
+    await provider.provision(mockContext, [{ type: 'A', name: 'ex.com', content: '1.2.3.4' }]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('[Dry Run] Would create/update DNS record'),
     );
   });
 });

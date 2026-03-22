@@ -145,7 +145,7 @@ PROCESS:
         }
 
         // Build
-        if (isManual && app.buildCommand) {
+        if (isManual || app.buildCommand) {
           this.info(`  Building ${app.name} locally...`);
 
           const buildEnv: Record<string, string> = {
@@ -173,17 +173,17 @@ PROCESS:
 
           if (context.options.dryRun) {
             this.info(`  [Dry Run] Would run build: ${app.buildCommand}`);
-            const overrides = Object.keys(buildEnv).filter(
-              (key) => buildEnv[key] !== process.env[key],
-            );
+            const overrides = Object.entries(app.env || {});
             if (overrides.length > 0) {
-              const overrideStr = overrides.map((key) => `${key}=${buildEnv[key]}`).join(' ');
+              const overrideStr = overrides.map(([k, v]) => `${k}=${v}`).join(', ');
               this.info(`  [Dry Run] Environment overrides: ${overrideStr}`);
             }
           } else {
             try {
-              const { execAsync } = await import('../deploy/utils');
-              await execAsync(app.buildCommand, { env: buildEnv });
+              if (app.buildCommand) {
+                const { execAsync } = await import('../deploy/utils');
+                await execAsync(app.buildCommand, { env: buildEnv });
+              }
             } catch (e: unknown) {
               const message = e instanceof Error ? e.message : String(e);
               this.error(`Build failed for ${app.name}: ${message}`);

@@ -13,8 +13,7 @@ describe('Integration Helpers Unit', () => {
   });
 
   it('runCLI should execute node with correct arguments', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as any);
+    vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as unknown as never);
     const args = ['init', 'my-project'];
     const cwd = '/test/cwd';
     const env = { FOO: 'bar' };
@@ -52,8 +51,8 @@ describe('Integration Helpers Unit', () => {
   it('createMockRepo should initialize git repo and commit files', async () => {
     vi.mocked(fs.ensureDir).mockResolvedValue(undefined);
     vi.mocked(fs.outputFile).mockResolvedValue(undefined);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(execa).mockResolvedValue({} as any);
+
+    vi.mocked(execa).mockResolvedValue({} as unknown as never);
 
     const dir = '/test/repo';
     const files = {

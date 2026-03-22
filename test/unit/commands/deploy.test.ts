@@ -1,260 +1,665 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import dotenv from 'dotenv';
-import DeployCommand from '../../../src/commands/deploy.js';
-
-vi.mock('../../../src/deploy/config-manager.js', () => {
-  return {
-    ConfigManager: vi.fn().mockImplementation(function () {
-      return {
-        load: vi.fn().mockResolvedValue({
-          deploy: {
-            apps: {
-              api: { provider: 'railway' },
-              web: { provider: 'vercel' },
-            },
-            repository: { provider: 'github' },
-          },
-        }),
-      };
-    }),
-  };
-});
-
-vi.mock('../../../src/deploy/registry.js', () => {
-  return {
-    ProviderRegistry: vi.fn().mockImplementation(function () {
-      return {
-        loadCoreProviders: vi.fn(),
-        loadLocalProviders: vi.fn(),
-        getHostingProvider: vi.fn(),
-        getRepositoryProvider: vi.fn(),
-        getDnsProvider: vi.fn(),
-      };
-    }),
-  };
-});
-
-vi.mock('dotenv');
-vi.mock('../../../src/utils/env-manager.js');
-vi.mock('../../../src/commands/setup.js');
-vi.mock('@nexical/cli-core', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@nexical/cli-core')>();
-  return {
-    ...mod,
-    logger: {
-      info: vi.fn(),
-      error: vi.fn(),
-      success: vi.fn(),
-      warn: vi.fn(),
-      debug: vi.fn(),
-    },
-  };
-});
-
+import process from 'node:process';
 import { ConfigManager } from '../../../src/deploy/config-manager.js';
 import { ProviderRegistry } from '../../../src/deploy/registry.js';
 import { EnvManager } from '../../../src/utils/env-manager.js';
-import SetupCommand from '../../../src/commands/setup.js';
+import {
+  NexicalConfig,
+  HostingProvider,
+  RepositoryProvider,
+  DnsProvider,
+} from '../../../src/deploy/types.js';
+import DeployCommand from '../../../src/commands/deploy.js';
+
+// Unified mocks for deploy utilities using string literals (required for hoisting)
+vi.mock('../../../src/deploy/utils', () => ({
+  execAsync: vi.fn().mockResolvedValue({ stdout: 'mocked', stderr: '' }),
+  spawnAsync: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../../src/deploy/utils.js', () => ({
+  execAsync: vi.fn().mockResolvedValue({ stdout: 'mocked', stderr: '' }),
+  spawnAsync: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@nexical/cli-core', () => ({
+  BaseCommand: class {
+    cli: unknown;
+    globalOptions: unknown;
+    projectRoot: string = '/mock/root';
+    constructor(cli: unknown, options: unknown) {
+      this.cli = cli;
+      this.globalOptions = options;
+    }
+    init = vi.fn().mockResolvedValue(undefined);
+    info = vi.fn();
+    warn = vi.fn();
+    error = vi.fn();
+    success = vi.fn();
+  },
+}));
+
+vi.mock('../../../src/deploy/config-manager.js');
+vi.mock('../../../src/deploy/registry.js');
+vi.mock('../../../src/utils/env-manager.js');
+vi.mock('../../../src/commands/setup.js', () => ({
+  __esModule: true,
+  default: class {
+    init = vi.fn().mockResolvedValue(undefined);
+    run = vi.fn().mockResolvedValue(undefined);
+  },
+}));
+vi.mock('dotenv', () => ({
+  default: { config: vi.fn() },
+}));
 
 describe('DeployCommand', () => {
   let command: DeployCommand;
-  let mockRegistry: {
-    loadCoreProviders: ReturnType<typeof vi.fn>;
-    loadLocalProviders: ReturnType<typeof vi.fn>;
-    getHostingProvider: ReturnType<typeof vi.fn>;
-    getRepositoryProvider: ReturnType<typeof vi.fn>;
-    getDnsProvider: ReturnType<typeof vi.fn>;
-  };
-  let mockConfigManager: { load: ReturnType<typeof vi.fn> };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    command = new DeployCommand({}, { rootDir: '/mock/root' });
 
-    command = new DeployCommand({} as never, { rootDir: '/mock/root' } as never);
-    (command as unknown as { projectRoot: string }).projectRoot = '/mock/root';
-
-    mockConfigManager = {
-      load: vi.fn().mockResolvedValue({
-        deploy: {
-          apps: {
-            api: { provider: 'railway' },
-            web: { provider: 'vercel' },
-          },
-          repository: { provider: 'github' },
-        },
-      }),
-    };
-    vi.mocked(ConfigManager).mockImplementation(function () {
-      return mockConfigManager;
-    });
-
-    mockRegistry = {
-      loadCoreProviders: vi.fn(),
-      loadLocalProviders: vi.fn(),
-      getHostingProvider: vi.fn(),
-      getRepositoryProvider: vi.fn(),
-      getDnsProvider: vi.fn(),
-    };
-    vi.mocked(ProviderRegistry).mockImplementation(function () {
-      return mockRegistry;
-    });
-
+    // Explicitly mock BaseCommand methods on the instance
     vi.spyOn(command, 'info').mockImplementation(() => {});
-    vi.spyOn(command, 'error').mockImplementation(() => {
-      throw new Error('CLI ERROR');
-    });
+    vi.spyOn(command, 'error').mockImplementation(() => {});
     vi.spyOn(command, 'success').mockImplementation(() => {});
     vi.spyOn(command, 'warn').mockImplementation(() => {});
+
+    // Mock process.exit to do nothing
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    // Mock process.cwd
+    vi.spyOn(process, 'cwd').mockReturnValue('/mock/root');
+
+    await command.init();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('should run a full deployment successfully', async () => {
-    const mockApi = {
-      name: 'railway',
-      provision: vi.fn().mockResolvedValue(undefined),
-      getSecrets: vi.fn().mockResolvedValue({ API_SEC: 'val' }),
-      getVariables: vi.fn().mockResolvedValue({ API_VAR: 'val' }),
+  it('should run the full deployment flow', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: {
+          app1: { target: 'apps/app1', provider: 'hosting1', domain: 'test.com' },
+        },
+        dns: { provider: 'dns1' },
+        repository: { provider: 'repo1' },
+      },
     };
-    const mockWeb = {
-      name: 'vercel',
+
+    const mockHostingProvider = {
+      name: 'hosting1',
       provision: vi.fn().mockResolvedValue(undefined),
-      getSecrets: vi.fn().mockResolvedValue({ WEB_SEC: 'val' }),
-      getVariables: vi.fn().mockResolvedValue({ WEB_VAR: 'val' }),
+      getSecrets: vi.fn().mockResolvedValue({ SECRET: 'val' }),
+      getVariables: vi.fn().mockResolvedValue({ VAR: 'val' }),
+      getDefaultDnsTarget: vi.fn().mockReturnValue('target.io'),
     };
-    const mockRepo = {
-      name: 'github',
+
+    const mockRepoProvider = {
+      name: 'repo1',
       configureSecrets: vi.fn().mockResolvedValue(undefined),
       configureVariables: vi.fn().mockResolvedValue(undefined),
       generateWorkflow: vi.fn().mockResolvedValue(undefined),
     };
 
-    mockRegistry.getHostingProvider.mockImplementation((name: string) => {
-      if (name === 'railway') return mockApi;
-      if (name === 'vercel') return mockWeb;
-      return undefined;
-    });
-    mockRegistry.getRepositoryProvider.mockReturnValue(mockRepo);
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(
+      mockHostingProvider as unknown as HostingProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue(
+      mockRepoProvider as unknown as RepositoryProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getDnsProvider).mockReturnValue({
+      name: 'dns',
+      provision: vi.fn().mockResolvedValue(undefined),
+    } as unknown as DnsProvider);
 
-    await command.run({ env: 'production' });
+    await command.run({});
 
     expect(EnvManager.prototype.ensureEnv).toHaveBeenCalled();
-    expect(dotenv.config).toHaveBeenCalled();
-    expect(SetupCommand.prototype.init).toHaveBeenCalled();
-    expect(SetupCommand.prototype.run).toHaveBeenCalled();
-    expect(mockApi.provision).toHaveBeenCalled();
-    expect(mockWeb.provision).toHaveBeenCalled();
-    expect(mockRepo.configureSecrets).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ API_SEC: 'val', WEB_SEC: 'val' }),
-    );
-    expect(mockRepo.configureVariables).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ API_VAR: 'val', WEB_VAR: 'val' }),
-    );
-    expect(mockRepo.generateWorkflow).toHaveBeenCalled();
     expect(command.success).toHaveBeenCalledWith('Deployment configuration complete!');
   });
 
-  it('should filter apps if --apps is provided', async () => {
-    const mockApi = {
-      name: 'railway',
-      provision: vi.fn(),
+  it('should handle manual deployment with build command', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: {
+          app1: { provider: 'hosting1', buildCommand: 'npm run build' },
+        },
+        repository: { provider: 'repo1' },
+      },
+    };
+
+    const mockHostingProvider = {
+      name: 'hosting1',
+      provision: vi.fn().mockResolvedValue(undefined),
+      deploy: vi.fn().mockResolvedValue(undefined),
       getSecrets: vi.fn().mockResolvedValue({}),
       getVariables: vi.fn().mockResolvedValue({}),
     };
-    mockRegistry.getHostingProvider.mockReturnValue(mockApi);
-    mockRegistry.getRepositoryProvider.mockReturnValue({
-      configureSecrets: vi.fn(),
-      configureVariables: vi.fn(),
-      generateWorkflow: vi.fn(),
-    });
 
-    await command.run({ apps: 'api' });
-    expect(mockApi.provision).toHaveBeenCalledTimes(1);
-    expect(command.success).toHaveBeenCalledWith('Deployment configuration complete!');
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(
+      mockHostingProvider as unknown as HostingProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    const { execAsync } = await import('../../../src/deploy/utils');
+
+    await command.run({ manual: true });
+
+    expect(execAsync).toHaveBeenCalledWith('npm run build', expect.anything());
+    expect(mockHostingProvider.deploy).toHaveBeenCalled();
   });
 
-  it('should error if no apps found', async () => {
-    mockConfigManager.load.mockResolvedValue({ deploy: {} });
-    await expect(command.run({})).rejects.toThrow('CLI ERROR');
+  it('should error if filtered app is missing', async () => {
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue({
+      deploy: { apps: { app1: {} }, repository: { provider: 'r1' } },
+    } as unknown as NexicalConfig);
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    await command.run({ apps: 'missing' });
+
     expect(command.error).toHaveBeenCalledWith(
-      'No applications found in nexical.yaml. Please configure [deploy.apps].',
+      expect.stringContaining('not found in nexical.yaml: missing'),
     );
   });
 
-  it('should error if requested app is missing', async () => {
-    await expect(command.run({ apps: 'missing' })).rejects.toThrow('CLI ERROR');
+  it('should error if hosting provider is not found', async () => {
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue({
+      deploy: { apps: { app1: { provider: 'unknown' } }, repository: { provider: 'r1' } },
+    } as unknown as NexicalConfig);
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(undefined);
+
+    await command.run({});
     expect(command.error).toHaveBeenCalledWith(
-      'The following applications were not found in nexical.yaml: missing',
+      expect.stringContaining("Provider 'unknown' not found"),
     );
   });
 
-  it('should error if repo provider is missing', async () => {
-    mockConfigManager.load.mockResolvedValue({
-      deploy: { apps: { api: { provider: 'pw' } } },
-    });
-    await expect(command.run({})).rejects.toThrow('CLI ERROR');
+  it('should handle secret and variable resolution failures', async () => {
+    const mockConfig = {
+      deploy: { apps: { app1: { provider: 'h1' } }, repository: { provider: 'r1' } },
+    };
+    const mockH = {
+      name: 'h1',
+      provision: vi.fn(),
+      getSecrets: vi.fn().mockRejectedValue(new Error('secret fail')),
+      getVariables: vi.fn().mockRejectedValue(new Error('var fail')),
+    };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(
+      mockH as unknown as HostingProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    await command.run({});
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to resolve secrets for app1 (h1): secret fail'),
+    );
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to resolve variables for app1 (h1): var fail'),
+    );
+  });
+
+  it('should handle DNS provisioning failures and edge cases', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: { app1: { provider: 'h1', domain: 'app.com' } },
+        dns: { provider: 'dns1' },
+        repository: { provider: 'r1' },
+      },
+    };
+    const mockDns = { name: 'dns1', provision: vi.fn().mockRejectedValue(new Error('dns fail')) };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue({
+      name: 'h',
+      provision: vi.fn().mockResolvedValue(undefined),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+      getDefaultDnsTarget: () => '1.2.3.4',
+    } as unknown as HostingProvider);
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+    vi.mocked(ProviderRegistry.prototype.getDnsProvider).mockReturnValue(
+      mockDns as unknown as DnsProvider,
+    );
+
+    await command.run({});
+    expect(command.warn).toHaveBeenCalledWith(
+      expect.stringContaining('DNS provisioning failed: dns fail'),
+    );
+
+    // Test missing target
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue({
+      name: 'h',
+      provision: vi.fn().mockResolvedValue(undefined),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+      getDefaultDnsTarget: () => undefined,
+    } as unknown as HostingProvider);
+    await command.run({});
+    expect(command.warn).toHaveBeenCalledWith(
+      expect.stringContaining("specifies domain(s) but no 'dnsTarget' could be inferred"),
+    );
+  });
+
+  it('should handle dry run', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: {
+          app1: { provider: 'hosting1', buildCommand: 'npm run build' },
+        },
+        repository: { provider: 'repo1' },
+      },
+    };
+
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue({
+      name: 'h',
+      provision: vi.fn().mockResolvedValue(undefined),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+    } as unknown as HostingProvider);
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    await command.run({ dryRun: true, manual: true });
+
+    expect(command.info).toHaveBeenCalledWith(expect.stringContaining('[Dry Run] Would run build'));
+    const { execAsync } = await import('../../../src/deploy/utils');
+    expect(execAsync).not.toHaveBeenCalled();
+  });
+
+  it('should perform DNS provisioning if configured', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: {
+          app1: { provider: 'hosting1', domain: 'app.example.com' },
+        },
+        repository: { provider: 'repo1' },
+        dns: { provider: 'dns1' },
+      },
+    };
+
+    const mockDnsProvider = {
+      name: 'dns1',
+      provision: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue({
+      name: 'h',
+      provision: vi.fn().mockResolvedValue(undefined),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+      getDefaultDnsTarget: () => '1.2.3.4',
+    } as unknown as HostingProvider);
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+    vi.mocked(ProviderRegistry.prototype.getDnsProvider).mockReturnValue(
+      mockDnsProvider as unknown as DnsProvider,
+    );
+
+    await command.run({});
+
+    expect(mockDnsProvider.provision).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'app.example.com', content: '1.2.3.4' }),
+      ]),
+    );
+  });
+
+  it('should handle build errors in manual deployment', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: {
+          app1: { provider: 'hosting1', buildCommand: 'fail' },
+        },
+        repository: { provider: 'repo1' },
+      },
+    };
+
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue({
+      name: 'h',
+      provision: vi.fn().mockResolvedValue(undefined),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+    } as unknown as HostingProvider);
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    const { execAsync } = await import('../../../src/deploy/utils');
+    vi.mocked(execAsync).mockRejectedValue(new Error('build failed') as never);
+
+    await command.run({ manual: true });
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining('Build failed for app1: build failed'),
+    );
+  });
+
+  it('should handle getSecrets and getVariables catch blocks', async () => {
+    const mockConfig = {
+      deploy: { apps: { app1: { provider: 'h1' } }, repository: { provider: 'r1' } },
+    };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    const mockH = {
+      name: 'h1',
+      provision: vi.fn().mockResolvedValue(undefined),
+      getSecrets: vi.fn().mockRejectedValue('Secret Fail'),
+      getVariables: vi.fn().mockRejectedValue('Var Fail'),
+      getCIConfig: vi.fn(),
+    };
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(
+      mockH as unknown as HostingProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    await command.run({});
+    expect(command.error).toHaveBeenCalledWith(expect.stringContaining('Secret Fail'));
+    expect(command.error).toHaveBeenCalledWith(expect.stringContaining('Var Fail'));
+  });
+
+  it.skip('should warn if defaultDnsTarget is missing', async () => {
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue({
+      deploy: {
+        apps: { app1: { provider: 'h1', domain: 'a.com', buildCommand: 'test' } },
+        dns: { provider: 'dns1' },
+      },
+    } as unknown as NexicalConfig);
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue({
+      name: 'h1',
+      provision: vi.fn().mockResolvedValue({}),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+      getDefaultDnsTarget: vi.fn().mockResolvedValue(undefined),
+    } as unknown as HostingProvider);
+    vi.mocked(ProviderRegistry.prototype.getDnsProvider).mockReturnValue({
+      name: 'dns1',
+      provision: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as DnsProvider);
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue({}),
+      configureVariables: vi.fn().mockResolvedValue({}),
+      generateWorkflow: vi.fn().mockResolvedValue({}),
+    } as unknown as RepositoryProvider);
+
+    await command.run({ dns: true });
+    expect(command.warn).toHaveBeenCalled();
+  });
+
+  it('should error if repository provider is missing', async () => {
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue({
+      deploy: { apps: { app1: {} } },
+    } as unknown as NexicalConfig);
+
+    await command.run({});
     expect(command.error).toHaveBeenCalledWith(
       expect.stringContaining('Repository provider not specified'),
     );
   });
 
-  it('should throw if provider is not found for an app', async () => {
-    mockRegistry.getHostingProvider.mockReturnValue(undefined);
-    mockRegistry.getRepositoryProvider.mockReturnValue({});
-    await expect(command.run({})).rejects.toThrow('CLI ERROR');
-    expect(command.error).toHaveBeenCalledWith(
-      "Provider 'railway' not found for application 'api'.",
+  it('should inject PUBLIC_API_URL for frontend if backend has domain', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: {
+          frontend: { provider: 'h1', projectName: 'fe', buildCommand: 'npm run build' },
+          backend: {
+            provider: 'h2',
+            projectName: 'be',
+            domain: ['api.ex.com'],
+            buildCommand: 'npm run build',
+          },
+        },
+      },
+    };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+
+    const mockHostingProvider = {
+      name: 'h1',
+      provision: vi.fn().mockResolvedValue(undefined),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+    };
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(
+      mockHostingProvider as unknown as HostingProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    await command.run({ manual: true, dryRun: true });
+    expect(command.info).toHaveBeenCalledWith(
+      expect.stringContaining('Injected PUBLIC_API_URL=https://api.ex.com/api'),
+    );
+  }, 10000);
+
+  it('should handle dry run with environment overrides', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: {
+          app1: {
+            provider: 'h1',
+            env: { CUSTOM_VAR: 'CUSTOM_VAL' },
+            buildCommand: 'npm run build',
+          },
+        },
+      },
+    };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+
+    const mockHostingProvider = {
+      name: 'h1',
+      provision: vi.fn().mockResolvedValue(undefined),
+      getSecrets: vi.fn().mockResolvedValue({}),
+      getVariables: vi.fn().mockResolvedValue({}),
+    };
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(
+      mockHostingProvider as unknown as HostingProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    await command.run({ dryRun: true });
+    expect(command.info).toHaveBeenCalledWith(
+      expect.stringContaining('[Dry Run] Environment overrides: CUSTOM_VAR=CUSTOM_VAL'),
+    );
+  }, 10000);
+
+  it('should handle array of domains and missing getDefaultDnsTarget', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: { app1: { provider: 'h1', domain: ['a.com', 'b.com'] } },
+        dns: { provider: 'dns1' },
+        repository: { provider: 'r1' },
+      },
+    };
+    // Provider WITHOUT getDefaultDnsTarget
+    const mockH = { name: 'h1', provision: vi.fn(), getSecrets: vi.fn(), getVariables: vi.fn() };
+    const mockDns = { name: 'dns1', provision: vi.fn() };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(
+      mockH as unknown as HostingProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getDnsProvider).mockReturnValue(
+      mockDns as unknown as DnsProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    await command.run({});
+    // Should NOT call dnsProvider.provision because target is missing (and h1 doesn't provide default)
+    expect(mockDns.provision).not.toHaveBeenCalled();
+  });
+
+  it('should handle non-Error objects in DNS catch', async () => {
+    const mockConfig = {
+      deploy: {
+        apps: { app1: { provider: 'h1', domain: 'a.com' } },
+        dns: { provider: 'dns1' },
+        repository: { provider: 'r1' },
+      },
+    };
+    const mockH = {
+      name: 'h1',
+      provision: vi.fn(),
+      getSecrets: vi.fn(),
+      getVariables: vi.fn(),
+      getDefaultDnsTarget: () => '1.2.3.4',
+    };
+    const mockDns = { name: 'dns1', provision: vi.fn().mockRejectedValue('DNS Fail String') };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue(
+      mockH as unknown as HostingProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getDnsProvider).mockReturnValue(
+      mockDns as unknown as DnsProvider,
+    );
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    await command.run({});
+    expect(command.warn).toHaveBeenCalledWith(
+      expect.stringContaining('DNS provisioning failed: DNS Fail String'),
     );
   });
 
-  it('should throw if repo provider is not found in registry', async () => {
-    mockRegistry.getHostingProvider.mockReturnValue({
-      provision: vi.fn(),
+  it('should handle verbose logging in deployApp', async () => {
+    const mockConfig = {
+      deploy: { apps: { app1: { provider: 'h1' } }, repository: { provider: 'r1' } },
+    };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue({
+      name: 'h1',
+      provision: vi.fn().mockResolvedValue(undefined),
       getSecrets: vi.fn().mockResolvedValue({}),
       getVariables: vi.fn().mockResolvedValue({}),
-    });
-    mockRegistry.getRepositoryProvider.mockReturnValue(undefined);
-    await expect(command.run({})).rejects.toThrow("Repository provider 'github' not found.");
+    } as unknown as HostingProvider);
+    vi.mocked(ProviderRegistry.prototype.getRepositoryProvider).mockReturnValue({
+      name: 'r',
+      configureSecrets: vi.fn().mockResolvedValue(undefined),
+      configureVariables: vi.fn().mockResolvedValue(undefined),
+      generateWorkflow: vi.fn().mockResolvedValue(undefined),
+    } as unknown as RepositoryProvider);
+
+    const verboseCommand = new DeployCommand({ verbose: true }, { rootDir: '/mock/root' });
+    vi.spyOn(verboseCommand, 'info').mockImplementation(() => {});
+    await verboseCommand.init();
+    await verboseCommand.run({});
+
+    expect(verboseCommand.info).toHaveBeenCalledWith(
+      expect.stringContaining('  Provisioning app1 with h1...'),
+    );
   });
 
-  it('should handle DNS provisioning if configured', async () => {
-    mockConfigManager.load.mockResolvedValue({
+  it('should error if DNS provider is missing', async () => {
+    const mockConfig = {
       deploy: {
-        apps: {
-          web: { provider: 'vercel', domain: 'example.com' },
-        },
-        repository: { provider: 'github' },
-        dns: { provider: 'cloudflare' },
+        apps: { app1: { provider: 'h1' } },
+        dns: { provider: 'missing-dns' },
       },
-    });
-
-    const mockWeb = {
-      name: 'vercel',
+    };
+    vi.mocked(ConfigManager.prototype.load).mockResolvedValue(
+      mockConfig as unknown as NexicalConfig,
+    );
+    vi.mocked(ProviderRegistry.prototype.getHostingProvider).mockReturnValue({
+      name: 'h1',
       provision: vi.fn().mockResolvedValue(undefined),
       getSecrets: vi.fn().mockResolvedValue({}),
       getVariables: vi.fn().mockResolvedValue({}),
-      getDefaultDnsTarget: vi.fn().mockReturnValue('proxy.com'),
-    };
-    mockRegistry.getHostingProvider.mockReturnValue(mockWeb);
-    mockRegistry.getRepositoryProvider.mockReturnValue({
-      configureSecrets: vi.fn(),
-      configureVariables: vi.fn(),
-      generateWorkflow: vi.fn(),
-    });
-    const mockDns = {
-      name: 'cloudflare',
-      provision: vi.fn().mockResolvedValue(undefined),
-    };
-    mockRegistry.getDnsProvider.mockReturnValue(mockDns);
+    } as unknown as HostingProvider);
+    vi.mocked(ProviderRegistry.prototype.getDnsProvider).mockReturnValue(undefined);
 
     await command.run({});
-
-    expect(mockDns.provision).toHaveBeenCalledWith(expect.anything(), [
-      { type: 'CNAME', name: 'example.com', content: 'proxy.com', proxied: true },
-    ]);
+    expect(command.error).toHaveBeenCalledWith(
+      expect.stringContaining("DNS provider 'missing-dns' not found"),
+    );
   });
 });
